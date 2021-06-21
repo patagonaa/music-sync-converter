@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MusicSyncConverter": {
+      "commandName": "Project",
+      "commandLineArgs": "config.json"
+    }
+  }
+}

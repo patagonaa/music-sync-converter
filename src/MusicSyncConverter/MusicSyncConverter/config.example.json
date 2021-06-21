@@ -1,0 +1,35 @@
+{
+    "DeviceConfig": {
+        "SupportedFormats": [
+            {
+                "Extension": ".mp3",
+                "Codec": "mp3"
+            },
+            {
+                "Extension": ".wma",
+                "Codec": "wmav1"
+            },
+            {
+                "Extension": ".wma",
+                "Codec": "wmav2"
+            },
+            {
+                "Extension": ".m4a",
+                "Codec": "aac",
+                "Profile": "LC"
+            }
+        ],
+        "FallbackFormat": {
+            "Extension": ".m4a",
+            "EncoderCodec": "aac",
+            "EncoderProfile": "aac_low",
+            "Bitrate": 192
+        }
+    },
+    "SourceDir": "Z:\\Audio\\",
+    "TargetDir": "E:\\Audio",
+    "Exclude": [
+        "Webradio",
+        "Musik\\Albums\\Nickelback"
+    ]
+}
