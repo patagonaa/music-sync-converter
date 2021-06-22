@@ -227,6 +227,7 @@ namespace MusicSyncConverter
                                     .WithAudioBitrate(fallbackCodec.Bitrate)
                                     .WithAudioCodec(fallbackCodec.EncoderCodec)
                                     .WithArgument(new CustomArgument(string.IsNullOrEmpty(fallbackCodec.EncoderProfile) ? string.Empty : $"-profile:a {fallbackCodec.EncoderProfile}"))
+                                    .WithArgument(new CustomArgument("-map_metadata 0:s:0"))
                                 )
                                 //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                 .ProcessAsynchronously();
