@@ -74,7 +74,7 @@ namespace MusicSyncConverter
 
         private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFile> files)
         {
-            await ReadDir(config, new DirectoryInfo(config.SourceDir), files);
+            await ReadDir(config, new DirectoryInfo(config.SourceDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar), files);
             files.Complete();
         }
 
