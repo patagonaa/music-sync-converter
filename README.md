@@ -1,12 +1,15 @@
 # music-sync-converter
-Sync music for use on flash drives in car radios and such. Convert unsupported files by extension, codec and profile.
+Sync music for use on flash drives in car radios and such. Detect and convert unsupported files by extension, codec and profile.
+
+_Should_ work on Linux and macOS as well, but is untested.
 
 ## Usage:
 `.\MusicSyncConverter.exe config.json`
 
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
-- Convert all files that are not MP3, WMA or AAC-LC to AAC-LC 192kbit/s
+- Copy all MP3, WMA and AAC-LC files
+- Convert all unsupported files (Fall back to AAC-LC 192kbit/s)
 - Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
 
 ```js
@@ -50,10 +53,13 @@ Sync music for use on flash drives in car radios and such. Convert unsupported f
 "as reported by ffprobe" =>
 ```
 Stream #0:0(und): Audio: aac (LC) (mp4a)
-                   Codec ^    ^ Profile (if applicable)
+                   Codec ^    ^ Profile
 
 Stream #0:0(und): Audio: aac (HE-AAC)
-                   Codec ^    ^ Profile (if applicable)
+                   Codec ^    ^ Profile
+
+Stream #0:0: Audio: mp3
+              Codec ^
 ```
 
 "as required for ffmpeg" =>
