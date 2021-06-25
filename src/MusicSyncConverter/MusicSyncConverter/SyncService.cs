@@ -217,8 +217,6 @@ namespace MusicSyncConverter
             try
             {
                 OutputFile toReturn = null;
-                if (workItem.ActionType != ActionType.Keep)
-                    Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFile.Path}");
                 switch (workItem.ActionType)
                 {
                     case ActionType.Keep:
@@ -226,6 +224,7 @@ namespace MusicSyncConverter
                         return null;
                     case ActionType.Copy:
                         {
+                            Console.WriteLine($"--> Read {workItem.SourceFile.Path}");
                             var targetPath = Path.Combine(config.TargetDir, workItem.SourceFile.Path);
                             handledFiles.Add(targetPath);
                             toReturn = new OutputFile
@@ -234,10 +233,12 @@ namespace MusicSyncConverter
                                 ModifiedDate = workItem.SourceFile.ModifiedDate,
                                 Content = File.ReadAllBytes(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
                             };
+                            Console.WriteLine($"<-- Read {workItem.SourceFile.Path}");
                             break;
                         }
                     case ActionType.ConvertToFallback:
                         {
+                            Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
                             var fallbackCodec = config.DeviceConfig.FallbackFormat;
                             var targetPath = Path.Combine(config.TargetDir, Path.GetDirectoryName(workItem.SourceFile.Path), Path.GetFileNameWithoutExtension(workItem.SourceFile.Path) + fallbackCodec.Extension);
                             using var ms = new MemoryStream();
@@ -259,14 +260,12 @@ namespace MusicSyncConverter
                                 ModifiedDate = workItem.SourceFile.ModifiedDate,
                                 Content = ms.ToArray()
                             };
+                            Console.WriteLine($"<-- Convert {workItem.SourceFile.Path}");
                             break;
                         }
                     default:
                         break;
                 }
-                if (workItem.ActionType != ActionType.Keep)
-                    Console.WriteLine($"<-- {workItem.ActionType} {workItem.SourceFile.Path}");
-
                 return toReturn;
             }
             catch (Exception ex)
