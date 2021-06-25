@@ -1,5 +1,6 @@
 ﻿using FFMpegCore;
 using FFMpegCore.Arguments;
+using FFMpegCore.Pipes;
 using MusicSyncConverter.Config;
 using System;
 using System.Collections.Concurrent;
@@ -25,24 +26,39 @@ namespace MusicSyncConverter
 
         public async Task Run(SyncConfig config)
         {
+            //set up pipeline
             var workerOptions = new ExecutionDataflowBlockOptions
             {
                 BoundedCapacity = 16,
-                MaxDegreeOfParallelism = 8,
+                MaxDegreeOfParallelism = config.WorkersConvert,
+                EnsureOrdered = false
+            };
+
+            var writeOptions = new ExecutionDataflowBlockOptions
+            {
+                BoundedCapacity = 8,
+                MaxDegreeOfParallelism = config.WorkersWrite,
                 EnsureOrdered = false
             };
 
             var compareBlock = new TransformManyBlock<SourceFile, WorkItem>(async x => new WorkItem[] { await Compare(config, x) }.Where(y => y != null), workerOptions);
 
             var handledFiles = new ConcurrentBag<string>();
-            var handleBlock = new ActionBlock<WorkItem>(x => HandleWorkItem(config, x, handledFiles), workerOptions);
+            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(config, x, handledFiles) }.Where(y => y != null), workerOptions);
 
             compareBlock.LinkTo(handleBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
+            var writeBlock = new ActionBlock<OutputFile>(WriteFile, writeOptions);
+
+            handleBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+
+            // start pipeline by adding directories to check for changes
             await ReadDirs(config, compareBlock);
 
-            await handleBlock.Completion;
+            // wait until last pipeline element is done
+            await writeBlock.Completion;
 
+            // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles);
             DeleteEmptySubdirectories(config.TargetDir);
         }
@@ -196,55 +212,76 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task HandleWorkItem(SyncConfig config, WorkItem workItem, ConcurrentBag<string> handledFiles)
+        private async Task<OutputFile> HandleWorkItem(SyncConfig config, WorkItem workItem, ConcurrentBag<string> handledFiles)
         {
             try
             {
+                OutputFile toReturn = null;
                 if (workItem.ActionType != ActionType.Keep)
-                    Console.WriteLine($"{workItem.ActionType} {workItem.SourceFile.Path}");
+                    Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFile.Path}");
                 switch (workItem.ActionType)
                 {
                     case ActionType.Keep:
                         handledFiles.Add(workItem.ExistingTargetFile);
-                        break;
+                        return null;
                     case ActionType.Copy:
                         {
                             var targetPath = Path.Combine(config.TargetDir, workItem.SourceFile.Path);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
-                            File.Copy(Path.Combine(config.SourceDir, workItem.SourceFile.Path), targetPath, true);
-                            File.SetLastWriteTime(targetPath, workItem.SourceFile.ModifiedDate);
                             handledFiles.Add(targetPath);
+                            toReturn = new OutputFile
+                            {
+                                Path = targetPath,
+                                ModifiedDate = workItem.SourceFile.ModifiedDate,
+                                Content = File.ReadAllBytes(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
+                            };
                             break;
                         }
                     case ActionType.ConvertToFallback:
                         {
                             var fallbackCodec = config.DeviceConfig.FallbackFormat;
                             var targetPath = Path.Combine(config.TargetDir, Path.GetDirectoryName(workItem.SourceFile.Path), Path.GetFileNameWithoutExtension(workItem.SourceFile.Path) + fallbackCodec.Extension);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            using var ms = new MemoryStream();
                             await FFMpegArguments
                                 .FromFileInput(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
-                                .OutputToFile(targetPath, true, x => x
+                                .OutputToPipe(new StreamPipeSink(ms), x => x
                                     .WithAudioBitrate(fallbackCodec.Bitrate)
                                     .WithAudioCodec(fallbackCodec.EncoderCodec)
                                     .WithArgument(new CustomArgument(string.IsNullOrEmpty(fallbackCodec.EncoderProfile) ? string.Empty : $"-profile:a {fallbackCodec.EncoderProfile}"))
                                     .WithArgument(new CustomArgument("-map_metadata 0:s:0"))
+                                    .ForceFormat(fallbackCodec.Muxer)
                                 )
                                 //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                 .ProcessAsynchronously();
-                            File.SetLastWriteTime(targetPath, workItem.SourceFile.ModifiedDate);
                             handledFiles.Add(targetPath);
+                            toReturn = new OutputFile
+                            {
+                                Path = targetPath,
+                                ModifiedDate = workItem.SourceFile.ModifiedDate,
+                                Content = ms.ToArray()
+                            };
                             break;
                         }
                     default:
                         break;
                 }
                 if (workItem.ActionType != ActionType.Keep)
-                    Console.WriteLine($"{workItem.ActionType} {workItem.SourceFile.Path} done");
+                    Console.WriteLine($"<-- {workItem.ActionType} {workItem.SourceFile.Path}");
+
+                return toReturn;
             }
             catch (Exception ex)
             {
                 throw;
             }
+        }
+
+        private async Task WriteFile(OutputFile file)
+        {
+            Console.WriteLine($"--> Write {file.Path}");
+            Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
+            await File.WriteAllBytesAsync(file.Path, file.Content);
+            File.SetLastWriteTime(file.Path, file.ModifiedDate);
+            Console.WriteLine($"<-- Write {file.Path}");
         }
     }
 }

@@ -38,6 +38,7 @@ _Should_ work on Linux and macOS as well, but is untested.
             "Extension": ".m4a",
             "EncoderCodec": "aac", // as required by ffmpeg (-c:a aac)
             "EncoderProfile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
+            "Muxer": "mp4", // as required by ffmpeg (usually, this is the container format)
             "Bitrate": 192 // kbit/s
         }
     },
@@ -46,7 +47,9 @@ _Should_ work on Linux and macOS as well, but is untested.
     "Exclude": [
         "Webradio",
         "Music\\Albums\\Nickelback"
-    ]
+    ],
+    "WorkersConvert": 8, // max number of threads to use for reading / converting files
+    "WorkersWrite": 1 // max number of threads to use for writing (for slow devices like HDDs, SD cards or flash drives, 1 is usually best)
 }
 ```
 

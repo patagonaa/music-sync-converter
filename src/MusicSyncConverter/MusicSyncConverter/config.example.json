@@ -23,6 +23,7 @@
             "Extension": ".m4a",
             "EncoderCodec": "aac",
             "EncoderProfile": "aac_low",
+            "Muxer": "mp4",
             "Bitrate": 192
         }
     },
@@ -31,5 +32,7 @@
     "Exclude": [
         "Webradio",
         "Musik\\Albums\\Nickelback"
-    ]
+    ],
+    "WorkersConvert": 8,
+    "WorkersWrite": 1
 }
