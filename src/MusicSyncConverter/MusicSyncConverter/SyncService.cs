@@ -1,5 +1,6 @@
 ﻿using FFMpegCore;
 using FFMpegCore.Arguments;
+using FFMpegCore.Enums;
 using FFMpegCore.Pipes;
 using MusicSyncConverter.Config;
 using System;
@@ -241,25 +242,34 @@ namespace MusicSyncConverter
                             Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
                             var fallbackCodec = config.DeviceConfig.FallbackFormat;
                             var targetPath = Path.Combine(config.TargetDir, Path.GetDirectoryName(workItem.SourceFile.Path), Path.GetFileNameWithoutExtension(workItem.SourceFile.Path) + fallbackCodec.Extension);
-                            using var ms = new MemoryStream();
-                            await FFMpegArguments
-                                .FromFileInput(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
-                                .OutputToPipe(new StreamPipeSink(ms), x => x
-                                    .WithAudioBitrate(fallbackCodec.Bitrate)
-                                    .WithAudioCodec(fallbackCodec.EncoderCodec)
-                                    .WithArgument(new CustomArgument(string.IsNullOrEmpty(fallbackCodec.EncoderProfile) ? string.Empty : $"-profile:a {fallbackCodec.EncoderProfile}"))
-                                    .WithArgument(new CustomArgument("-map_metadata 0:s:0"))
-                                    .ForceFormat(fallbackCodec.Muxer)
-                                )
-                                //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
-                                .ProcessAsynchronously();
-                            handledFiles.Add(targetPath);
-                            toReturn = new OutputFile
+                            var tmpFileName = Path.GetTempFileName();
+                            try
                             {
-                                Path = targetPath,
-                                ModifiedDate = workItem.SourceFile.ModifiedDate,
-                                Content = ms.ToArray()
-                            };
+                                var args = FFMpegArguments
+                                    .FromFileInput(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
+                                    .OutputToFile(tmpFileName, true, x => x
+                                        .ForceFormat(fallbackCodec.Muxer)
+                                        .WithAudioBitrate(fallbackCodec.Bitrate)
+                                        .WithAudioCodec(fallbackCodec.EncoderCodec)
+                                        .DisableChannel(Channel.Video) // remove album art from each file
+                                        .WithArgument(new CustomArgument(string.IsNullOrEmpty(fallbackCodec.EncoderProfile) ? string.Empty : $"-profile:a {fallbackCodec.EncoderProfile}"))
+                                        .WithArgument(new CustomArgument("-map_metadata 0")) // map flac and ogg tags to ID3
+                                    );
+                                await args
+                                    //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
+                                    .ProcessAsynchronously();
+                                handledFiles.Add(targetPath);
+                                toReturn = new OutputFile
+                                {
+                                    Path = targetPath,
+                                    ModifiedDate = workItem.SourceFile.ModifiedDate,
+                                    Content = File.ReadAllBytes(tmpFileName)
+                                };
+                            }
+                            finally
+                            {
+                                File.Delete(tmpFileName);
+                            }
                             Console.WriteLine($"<-- Convert {workItem.SourceFile.Path}");
                             break;
                         }
