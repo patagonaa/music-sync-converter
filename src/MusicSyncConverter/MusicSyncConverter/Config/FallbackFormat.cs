@@ -7,5 +7,7 @@
         public string EncoderCodec { get; set; }
         public string EncoderProfile { get; set; }
         public int Bitrate { get; set; }
+        public string CoverCodec { get; set; }
+        public int? MaxCoverSize { get; set; }
     }
 }

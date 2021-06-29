@@ -24,7 +24,9 @@
             "EncoderCodec": "aac",
             "EncoderProfile": "aac_low",
             "Muxer": "mp4",
-            "Bitrate": 192
+            "Bitrate": 192,
+            "CoverCodec": "mjpeg",
+            "MaxCoverSize": 320
         }
     },
     "SourceDir": "Z:\\Audio\\",

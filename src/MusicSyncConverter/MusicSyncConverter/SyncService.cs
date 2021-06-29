@@ -1,7 +1,6 @@
 ﻿using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
-using FFMpegCore.Pipes;
 using MusicSyncConverter.Config;
 using System;
 using System.Collections.Concurrent;
@@ -247,14 +246,32 @@ namespace MusicSyncConverter
                             {
                                 var args = FFMpegArguments
                                     .FromFileInput(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
-                                    .OutputToFile(tmpFileName, true, x => x
-                                        .ForceFormat(fallbackCodec.Muxer)
-                                        .WithAudioBitrate(fallbackCodec.Bitrate)
-                                        .WithAudioCodec(fallbackCodec.EncoderCodec)
-                                        .DisableChannel(Channel.Video) // remove album art from each file
-                                        .WithArgument(new CustomArgument(string.IsNullOrEmpty(fallbackCodec.EncoderProfile) ? string.Empty : $"-profile:a {fallbackCodec.EncoderProfile}"))
-                                        .WithArgument(new CustomArgument("-map_metadata 0")) // map flac and ogg tags to ID3
-                                    );
+                                    .OutputToFile(tmpFileName, true, x =>
+                                    {
+                                        x
+                                            .ForceFormat(fallbackCodec.Muxer)
+                                            .WithAudioBitrate(fallbackCodec.Bitrate)
+                                            .WithAudioCodec(fallbackCodec.EncoderCodec)
+                                            .WithArgument(new CustomArgument("-map_metadata 0")); // map flac and ogg tags to ID3
+
+                                        if (!string.IsNullOrEmpty(fallbackCodec.CoverCodec))
+                                        {
+                                            x.WithVideoCodec(fallbackCodec.CoverCodec);
+                                            if (fallbackCodec.MaxCoverSize != null)
+                                            {
+                                                x.WithArgument(new CustomArgument($"-vf \"scale='min({fallbackCodec.MaxCoverSize.Value},iw)':min'({fallbackCodec.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
+                                            }
+                                        }
+                                        else
+                                        {
+                                            x.DisableChannel(Channel.Video);
+                                        }
+
+                                        if (!string.IsNullOrEmpty(fallbackCodec.EncoderProfile))
+                                        {
+                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackCodec.EncoderProfile}"));
+                                        }
+                                    });
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                     .ProcessAsynchronously();
