@@ -104,6 +104,14 @@ namespace MusicSyncConverter
             }
             foreach (var file in dir.EnumerateFiles())
             {
+                // Skip files not locally on disk (if source is OneDrive / NextCloud and virtual files are used)
+                if (file.Attributes.HasFlag((FileAttributes)0x400000) || // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+                    file.Attributes.HasFlag((FileAttributes)0x40000) // FILE_ATTRIBUTE_RECALL_ON_OPEN
+                    )
+                {
+                    continue;
+                }
+
                 if (_supportedExtensions.Contains(file.Extension))
                 {
                     var path = file.FullName.Substring(sourceDirLength);
