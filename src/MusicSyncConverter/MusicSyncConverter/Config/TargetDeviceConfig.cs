@@ -6,5 +6,6 @@ namespace MusicSyncConverter.Config
     {
         public IList<FileFormat> SupportedFormats { get; set; }
         public FallbackFormat FallbackFormat { get; set; }
+        public CharacterLimitations CharacterLimitations { get; set; }
     }
 }

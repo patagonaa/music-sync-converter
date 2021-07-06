@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -133,21 +134,22 @@ namespace MusicSyncConverter
         {
             try
             {
-                string targetDirPath = Path.GetDirectoryName(Path.Combine(config.TargetDir, sourceFile.Path));
+                var targetFilePath = Path.Combine(config.TargetDir, config.DeviceConfig.CharacterLimitations != null ? SanitizePath(config.DeviceConfig.CharacterLimitations, sourceFile.Path) : sourceFile.Path);
+                string targetDirPath = Path.GetDirectoryName(targetFilePath);
 
                 var directoryInfo = new DirectoryInfo(targetDirPath);
-                var targetInfo = directoryInfo.Exists ? directoryInfo.GetFiles($"{Path.GetFileNameWithoutExtension(sourceFile.Path)}.*") : new FileInfo[0];
+                var targetInfo = directoryInfo.Exists ? directoryInfo.GetFiles($"{Path.GetFileNameWithoutExtension(targetFilePath)}.*") : new FileInfo[0];
 
                 if (targetInfo.Length == 0)
                 {
-                    return await GetWorkItemCopyOrConvert(config, sourceFile);
+                    return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
                 }
                 else if (targetInfo.Length == 1)
                 {
                     var targetDate = targetInfo[0].LastWriteTime;
                     if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
                     {
-                        return await GetWorkItemCopyOrConvert(config, sourceFile);
+                        return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
                     }
                     else
                     {
@@ -155,7 +157,7 @@ namespace MusicSyncConverter
                         {
                             ActionType = ActionType.Keep,
                             SourceFile = sourceFile,
-                            ExistingTargetFile = targetInfo[0].FullName
+                            TargetFilePath = targetInfo[0].FullName
                         };
                     }
                 }
@@ -171,7 +173,43 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task<WorkItem> GetWorkItemCopyOrConvert(SyncConfig config, SourceFile sourceFile)
+        private string SanitizePath(CharacterLimitations config, string path)
+        {
+            var toReturn = new StringBuilder();
+
+            foreach (var chr in path)
+            {
+                if (chr == Path.DirectorySeparatorChar || chr == '.')
+                {
+                    toReturn.Append(chr);
+                    continue;
+                }
+
+                var replacement = config.Replacements.FirstOrDefault(x => x.Char == chr);
+                if (replacement != null)
+                {
+                    toReturn.Append(replacement.Replacement);
+                    continue;
+                }
+
+                if (config.SupportedChars.Contains(chr))
+                {
+                    toReturn.Append(chr);
+                    continue;
+                }
+
+                toReturn.Append('_');
+            }
+
+            var outStr = toReturn.ToString();
+            //if(path != outStr)
+            //{
+            //    Console.WriteLine($"{path} -> {outStr}");
+            //}
+            return outStr;
+        }
+
+        private async Task<WorkItem> GetWorkItemCopyOrConvert(SyncConfig config, SourceFile sourceFile, string targetFilePath)
         {
             var sourceExtension = Path.GetExtension(sourceFile.Path);
 
@@ -195,14 +233,16 @@ namespace MusicSyncConverter
                     return new WorkItem
                     {
                         ActionType = ActionType.Copy,
-                        SourceFile = sourceFile
+                        SourceFile = sourceFile,
+                        TargetFilePath = targetFilePath
                     };
                 }
             }
             return new WorkItem
             {
                 ActionType = ActionType.ConvertToFallback,
-                SourceFile = sourceFile
+                SourceFile = sourceFile,
+                TargetFilePath = Path.Combine(Path.GetDirectoryName(targetFilePath), Path.GetFileNameWithoutExtension(targetFilePath) + config.DeviceConfig.FallbackFormat.Extension)
             };
         }
 
@@ -228,16 +268,15 @@ namespace MusicSyncConverter
                 switch (workItem.ActionType)
                 {
                     case ActionType.Keep:
-                        handledFiles.Add(workItem.ExistingTargetFile);
+                        handledFiles.Add(workItem.TargetFilePath);
                         return null;
                     case ActionType.Copy:
                         {
                             Console.WriteLine($"--> Read {workItem.SourceFile.Path}");
-                            var targetPath = Path.Combine(config.TargetDir, workItem.SourceFile.Path);
-                            handledFiles.Add(targetPath);
+                            handledFiles.Add(workItem.TargetFilePath);
                             toReturn = new OutputFile
                             {
-                                Path = targetPath,
+                                Path = workItem.TargetFilePath,
                                 ModifiedDate = workItem.SourceFile.ModifiedDate,
                                 Content = File.ReadAllBytes(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
                             };
@@ -248,7 +287,6 @@ namespace MusicSyncConverter
                         {
                             Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
                             var fallbackCodec = config.DeviceConfig.FallbackFormat;
-                            var targetPath = Path.Combine(config.TargetDir, Path.GetDirectoryName(workItem.SourceFile.Path), Path.GetFileNameWithoutExtension(workItem.SourceFile.Path) + fallbackCodec.Extension);
                             var tmpFileName = Path.GetTempFileName();
                             try
                             {
@@ -260,7 +298,7 @@ namespace MusicSyncConverter
                                             .ForceFormat(fallbackCodec.Muxer)
                                             .WithAudioBitrate(fallbackCodec.Bitrate)
                                             .WithAudioCodec(fallbackCodec.EncoderCodec)
-                                            .WithArgument(new CustomArgument("-map_metadata 0")); // map flac and ogg tags to ID3
+                                            .WithArgument(new CustomArgument("-map_metadata 0:s:0 -map_metadata 0:g")); // map flac and ogg tags to ID3
 
                                         if (!string.IsNullOrEmpty(fallbackCodec.CoverCodec))
                                         {
@@ -283,10 +321,10 @@ namespace MusicSyncConverter
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                     .ProcessAsynchronously();
-                                handledFiles.Add(targetPath);
+                                handledFiles.Add(workItem.TargetFilePath);
                                 toReturn = new OutputFile
                                 {
-                                    Path = targetPath,
+                                    Path = workItem.TargetFilePath,
                                     ModifiedDate = workItem.SourceFile.ModifiedDate,
                                     Content = File.ReadAllBytes(tmpFileName)
                                 };
@@ -305,17 +343,26 @@ namespace MusicSyncConverter
             }
             catch (Exception ex)
             {
+                Console.WriteLine(ex);
                 throw;
             }
         }
 
         private async Task WriteFile(OutputFile file)
         {
-            Console.WriteLine($"--> Write {file.Path}");
-            Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
-            await File.WriteAllBytesAsync(file.Path, file.Content);
-            File.SetLastWriteTime(file.Path, file.ModifiedDate);
-            Console.WriteLine($"<-- Write {file.Path}");
+            try
+            {
+                Console.WriteLine($"--> Write {file.Path}");
+                Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
+                await File.WriteAllBytesAsync(file.Path, file.Content);
+                File.SetLastWriteTime(file.Path, file.ModifiedDate);
+                Console.WriteLine($"<-- Write {file.Path}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                throw;
+            }
         }
     }
 }

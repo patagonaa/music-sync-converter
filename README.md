@@ -43,6 +43,39 @@ _Should_ work on Linux and macOS as well, but is untested.
             "Bitrate": 192, // kbit/s
             "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album convers)
             "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)
+        },
+        "CharacterLimitations": { // omit this if your device supports unicode
+            "SupportedChars": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-_ (),'[]!&", // all natively supported characters
+            "Replacements": [ // characters that should be replaced by different characters
+                {
+                    "Char": "ä",
+                    "Replacement": "ae"
+                },
+                {
+                    "Char": "Ä",
+                    "Replacement": "Ae"
+                },
+                {
+                    "Char": "ö",
+                    "Replacement": "oe"
+                },
+                {
+                    "Char": "Ö",
+                    "Replacement": "Oe"
+                },
+                {
+                    "Char": "ü",
+                    "Replacement": "ue"
+                },
+                {
+                    "Char": "Ü",
+                    "Replacement": "Ue"
+                },
+                {
+                    "Char": "ß",
+                    "Replacement": "ss"
+                }
+            ]
         }
     },
     "SourceDir": "Z:\\Audio\\",
