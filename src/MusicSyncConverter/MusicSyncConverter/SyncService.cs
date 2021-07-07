@@ -317,6 +317,10 @@ namespace MusicSyncConverter
                                         {
                                             x.WithArgument(new CustomArgument($"-profile:a {fallbackCodec.EncoderProfile}"));
                                         }
+                                        if (!string.IsNullOrEmpty(fallbackCodec.AdditionalFlags))
+                                        {
+                                            x.WithArgument(new CustomArgument(fallbackCodec.AdditionalFlags));
+                                        }
                                     });
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))

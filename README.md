@@ -40,7 +40,8 @@ _Should_ work on Linux and macOS as well, but is untested.
             "Extension": ".m4a",
             "EncoderCodec": "aac", // as required by ffmpeg (-c:a aac)
             "EncoderProfile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
-            "Muxer": "mp4", // as required by ffmpeg (usually, this is the container format)
+            "Muxer": "ipod", // as required by ffmpeg (usually, this is the container format)
+            "AdditionalFlags": "-movflags faststart", // additional arguments to pass to ffmpeg
             "Bitrate": 192, // kbit/s
             "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album convers)
             "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)

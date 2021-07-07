@@ -23,7 +23,8 @@
             "Extension": ".m4a",
             "EncoderCodec": "aac",
             "EncoderProfile": "aac_low",
-            "Muxer": "mp4",
+            "Muxer": "ipod",
+            "AdditionalFlags": "-movflags faststart",
             "Bitrate": 192,
             "CoverCodec": "mjpeg",
             "MaxCoverSize": 320
