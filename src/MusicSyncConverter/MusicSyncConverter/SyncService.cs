@@ -177,6 +177,8 @@ namespace MusicSyncConverter
         {
             var toReturn = new StringBuilder();
 
+            var unsupportedChars = false;
+
             foreach (var chr in path)
             {
                 if (chr == Path.DirectorySeparatorChar || chr == '.')
@@ -198,7 +200,13 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                toReturn.Append('_');
+                unsupportedChars = true;
+                toReturn.Append(chr);
+            }
+
+            if (unsupportedChars)
+            {
+                Console.WriteLine($"Warning: unsupported chars in {path}");
             }
 
             var outStr = toReturn.ToString();
