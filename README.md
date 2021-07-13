@@ -81,6 +81,15 @@ _Should_ work on Linux and macOS as well, but is untested.
         }
     },
     "SourceDir": "Z:\\Audio\\",
+    "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
+        ".mp3",
+        ".ogg",
+        ".m4a",
+        ".flac",
+        ".opus",
+        ".wma",
+        ".wav"
+    ],
     "TargetDir": "E:\\Audio\\",
     "Exclude": [
         "Webradio",

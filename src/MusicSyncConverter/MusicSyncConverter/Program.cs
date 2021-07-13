@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using MusicSyncConverter.Config;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,6 +23,20 @@ namespace MusicSyncConverter
                 .Build();
 
             var config = configRoot.Get<SyncConfig>();
+
+            if (config.SourceExtensions == null || config.SourceExtensions.Count == 0)
+            {
+                config.SourceExtensions = new List<string>
+                    {
+                        ".mp3",
+                        ".ogg",
+                        ".m4a",
+                        ".flac",
+                        ".opus",
+                        ".wma",
+                        ".wav"
+                    };
+            }
 
             var cts = new CancellationTokenSource();
 

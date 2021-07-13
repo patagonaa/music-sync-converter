@@ -16,16 +16,6 @@ namespace MusicSyncConverter
 {
     class SyncService
     {
-        public static readonly IReadOnlyCollection<string> _supportedExtensions = new HashSet<string>
-        {
-            ".mp3",
-            ".ogg",
-            ".m4a",
-            ".flac",
-            ".opus",
-            ".wma"
-        };
-
         public async Task Run(SyncConfig config, CancellationToken cancellationToken)
         {
             //set up pipeline
@@ -125,7 +115,7 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                if (_supportedExtensions.Contains(file.Extension))
+                if (config.SourceExtensions.Contains(file.Extension))
                 {
                     var path = file.FullName.Substring(sourceDirLength);
                     await files.SendAsync(new SourceFile

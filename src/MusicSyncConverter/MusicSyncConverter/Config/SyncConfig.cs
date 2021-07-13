@@ -4,6 +4,7 @@ namespace MusicSyncConverter.Config
 {
     public class SyncConfig
     {
+        public IList<string> SourceExtensions { get; set; }
         public TargetDeviceConfig DeviceConfig { get; set; }
         public string SourceDir { get; set; }
         public string TargetDir { get; set; }
