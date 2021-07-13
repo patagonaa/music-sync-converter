@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -25,36 +26,38 @@ namespace MusicSyncConverter
             ".wma"
         };
 
-        public async Task Run(SyncConfig config)
+        public async Task Run(SyncConfig config, CancellationToken cancellationToken)
         {
             //set up pipeline
             var workerOptions = new ExecutionDataflowBlockOptions
             {
                 BoundedCapacity = 16,
                 MaxDegreeOfParallelism = config.WorkersConvert,
-                EnsureOrdered = false
+                EnsureOrdered = false,
+                CancellationToken = cancellationToken
             };
 
             var writeOptions = new ExecutionDataflowBlockOptions
             {
                 BoundedCapacity = 8,
                 MaxDegreeOfParallelism = config.WorkersWrite,
-                EnsureOrdered = false
+                EnsureOrdered = false,
+                CancellationToken = cancellationToken
             };
 
             var compareBlock = new TransformManyBlock<SourceFile, WorkItem>(async x => new WorkItem[] { await Compare(config, x) }.Where(y => y != null), workerOptions);
 
             var handledFiles = new ConcurrentBag<string>();
-            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(config, x, handledFiles) }.Where(y => y != null), workerOptions);
+            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(config, x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
 
             compareBlock.LinkTo(handleBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-            var writeBlock = new ActionBlock<OutputFile>(WriteFile, writeOptions);
+            var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, cancellationToken), writeOptions);
 
             handleBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding directories to check for changes
-            await ReadDirs(config, compareBlock);
+            await ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
             await writeBlock.Completion;
@@ -89,14 +92,22 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFile> files)
+        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFile> files, CancellationToken cancellationToken)
         {
-            await ReadDir(config, new DirectoryInfo(config.SourceDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar), files);
-            files.Complete();
+            try
+            {
+                await ReadDir(config, new DirectoryInfo(config.SourceDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar), files, cancellationToken);
+                files.Complete();
+            }
+            catch (Exception ex)
+            {
+                files.Fault(ex);
+            }
         }
 
-        private async Task ReadDir(SyncConfig config, DirectoryInfo dir, ITargetBlock<SourceFile> files)
+        private async Task ReadDir(SyncConfig config, DirectoryInfo dir, ITargetBlock<SourceFile> files, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var sourceDirLength = config.SourceDir.TrimEnd(Path.DirectorySeparatorChar).Length + 1;
 
             if (config.Exclude.Contains(dir.FullName.Substring(sourceDirLength)))
@@ -105,6 +116,7 @@ namespace MusicSyncConverter
             }
             foreach (var file in dir.EnumerateFiles())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 // Skip files not locally on disk (if source is OneDrive / NextCloud and virtual files are used)
                 if (file.Attributes.HasFlag((FileAttributes)0x400000) || // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
                     file.Attributes.HasFlag((FileAttributes)0x40000) // FILE_ATTRIBUTE_RECALL_ON_OPEN
@@ -126,7 +138,7 @@ namespace MusicSyncConverter
 
             foreach (var subDir in dir.EnumerateDirectories())
             {
-                await ReadDir(config, subDir, files);
+                await ReadDir(config, subDir, files, cancellationToken);
             }
         }
 
@@ -268,7 +280,7 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<OutputFile> HandleWorkItem(SyncConfig config, WorkItem workItem, ConcurrentBag<string> handledFiles)
+        private async Task<OutputFile> HandleWorkItem(SyncConfig config, WorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
@@ -286,7 +298,7 @@ namespace MusicSyncConverter
                             {
                                 Path = workItem.TargetFilePath,
                                 ModifiedDate = workItem.SourceFile.ModifiedDate,
-                                Content = File.ReadAllBytes(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
+                                Content = await File.ReadAllBytesAsync(Path.Combine(config.SourceDir, workItem.SourceFile.Path), cancellationToken)
                             };
                             Console.WriteLine($"<-- Read {workItem.SourceFile.Path}");
                             break;
@@ -295,7 +307,7 @@ namespace MusicSyncConverter
                         {
                             Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
                             var fallbackCodec = config.DeviceConfig.FallbackFormat;
-                            var tmpFileName = Path.GetTempFileName();
+                            var tmpFileName = Path.Combine(Path.GetTempPath(), $"MusicSync.{Guid.NewGuid():D}.tmp");
                             try
                             {
                                 var args = FFMpegArguments
@@ -303,10 +315,15 @@ namespace MusicSyncConverter
                                     .OutputToFile(tmpFileName, true, x =>
                                     {
                                         x
-                                            .ForceFormat(fallbackCodec.Muxer)
                                             .WithAudioBitrate(fallbackCodec.Bitrate)
-                                            .WithAudioCodec(fallbackCodec.EncoderCodec)
-                                            .WithArgument(new CustomArgument("-map_metadata 0:s:0 -map_metadata 0:g")); // map flac and ogg tags to ID3
+                                            .WithAudioCodec(fallbackCodec.EncoderCodec);
+
+                                        if (!string.IsNullOrEmpty(fallbackCodec.EncoderProfile))
+                                        {
+                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackCodec.EncoderProfile}"));
+                                        }
+
+                                        x.WithArgument(new CustomArgument("-map_metadata 0:s:0 -map_metadata 0:g")); // map flac and ogg tags to ID3
 
                                         if (!string.IsNullOrEmpty(fallbackCodec.CoverCodec))
                                         {
@@ -321,15 +338,16 @@ namespace MusicSyncConverter
                                             x.DisableChannel(Channel.Video);
                                         }
 
-                                        if (!string.IsNullOrEmpty(fallbackCodec.EncoderProfile))
-                                        {
-                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackCodec.EncoderProfile}"));
-                                        }
+                                        x.ForceFormat(fallbackCodec.Muxer);
+
                                         if (!string.IsNullOrEmpty(fallbackCodec.AdditionalFlags))
                                         {
                                             x.WithArgument(new CustomArgument(fallbackCodec.AdditionalFlags));
                                         }
-                                    });
+                                    })
+                                    .CancellableThrough(out var cancelFfmpeg);
+                                cancellationToken.Register(() => cancelFfmpeg());
+                                cancellationToken.ThrowIfCancellationRequested();
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                     .ProcessAsynchronously();
@@ -355,20 +373,28 @@ namespace MusicSyncConverter
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
-                throw;
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine(ex);
+                    throw;
+                }
             }
+            return null;
         }
 
-        private async Task WriteFile(OutputFile file)
+        private async Task WriteFile(OutputFile file, CancellationToken cancellationToken)
         {
             try
             {
                 Console.WriteLine($"--> Write {file.Path}");
                 Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
-                await File.WriteAllBytesAsync(file.Path, file.Content);
+                await File.WriteAllBytesAsync(file.Path, file.Content, cancellationToken);
                 File.SetLastWriteTime(file.Path, file.ModifiedDate);
                 Console.WriteLine($"<-- Write {file.Path}");
+            }
+            catch (TaskCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
