@@ -47,39 +47,14 @@ namespace MusicSyncConverter
             handleBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding directories to check for changes
-            await ReadDirs(config, compareBlock, cancellationToken);
+            var readDirsTask = ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
-            await writeBlock.Completion;
+            await Task.WhenAll(readDirsTask, compareBlock.Completion, handleBlock.Completion, writeBlock.Completion);
 
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles);
             DeleteEmptySubdirectories(config.TargetDir);
-        }
-
-        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles)
-        {
-            foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
-            {
-                if (!handledFiles.Contains(targetFileFull))
-                {
-                    Console.WriteLine($"Delete {targetFileFull}");
-                    File.Delete(targetFileFull);
-                }
-            }
-        }
-
-        private void DeleteEmptySubdirectories(string parentDirectory)
-        {
-            foreach (string directory in Directory.GetDirectories(parentDirectory))
-            {
-                DeleteEmptySubdirectories(directory);
-                if (!Directory.EnumerateFileSystemEntries(directory).Any())
-                {
-                    Console.WriteLine($"Delete {directory}");
-                    Directory.Delete(directory, false);
-                }
-            }
         }
 
         private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFile> files, CancellationToken cancellationToken)
@@ -236,7 +211,6 @@ namespace MusicSyncConverter
                     Console.WriteLine($"Error while FFProbe {sourceFile.Path}");
                     return null;
                 }
-
                 var audioStream = mediaAnalysis.PrimaryAudioStream;
                 if (audioStream != null && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
                 {
@@ -296,7 +270,7 @@ namespace MusicSyncConverter
                     case ActionType.ConvertToFallback:
                         {
                             Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
-                            var fallbackCodec = config.DeviceConfig.FallbackFormat;
+                            var fallbackFormat = config.DeviceConfig.FallbackFormat;
                             var tmpFileName = Path.Combine(Path.GetTempPath(), $"MusicSync.{Guid.NewGuid():D}.tmp");
                             try
                             {
@@ -305,22 +279,22 @@ namespace MusicSyncConverter
                                     .OutputToFile(tmpFileName, true, x =>
                                     {
                                         x
-                                            .WithAudioBitrate(fallbackCodec.Bitrate)
-                                            .WithAudioCodec(fallbackCodec.EncoderCodec);
+                                            .WithAudioBitrate(fallbackFormat.Bitrate)
+                                            .WithAudioCodec(fallbackFormat.EncoderCodec);
 
-                                        if (!string.IsNullOrEmpty(fallbackCodec.EncoderProfile))
+                                        if (!string.IsNullOrEmpty(fallbackFormat.EncoderProfile))
                                         {
-                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackCodec.EncoderProfile}"));
+                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackFormat.EncoderProfile}"));
                                         }
 
                                         x.WithArgument(new CustomArgument("-map_metadata 0:s:0 -map_metadata 0:g")); // map flac and ogg tags to ID3
 
-                                        if (!string.IsNullOrEmpty(fallbackCodec.CoverCodec))
+                                        if (!string.IsNullOrEmpty(fallbackFormat.CoverCodec))
                                         {
-                                            x.WithVideoCodec(fallbackCodec.CoverCodec);
-                                            if (fallbackCodec.MaxCoverSize != null)
+                                            x.WithVideoCodec(fallbackFormat.CoverCodec);
+                                            if (fallbackFormat.MaxCoverSize != null)
                                             {
-                                                x.WithArgument(new CustomArgument($"-vf \"scale='min({fallbackCodec.MaxCoverSize.Value},iw)':min'({fallbackCodec.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
+                                                x.WithArgument(new CustomArgument($"-vf \"scale='min({fallbackFormat.MaxCoverSize.Value},iw)':min'({fallbackFormat.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
                                             }
                                         }
                                         else
@@ -328,11 +302,11 @@ namespace MusicSyncConverter
                                             x.DisableChannel(Channel.Video);
                                         }
 
-                                        x.ForceFormat(fallbackCodec.Muxer);
+                                        x.ForceFormat(fallbackFormat.Muxer);
 
-                                        if (!string.IsNullOrEmpty(fallbackCodec.AdditionalFlags))
+                                        if (!string.IsNullOrEmpty(fallbackFormat.AdditionalFlags))
                                         {
-                                            x.WithArgument(new CustomArgument(fallbackCodec.AdditionalFlags));
+                                            x.WithArgument(new CustomArgument(fallbackFormat.AdditionalFlags));
                                         }
                                     })
                                     .CancellableThrough(out var cancelFfmpeg);
@@ -390,6 +364,31 @@ namespace MusicSyncConverter
             {
                 Console.WriteLine(ex);
                 throw;
+            }
+        }
+
+        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles)
+        {
+            foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
+            {
+                if (!handledFiles.Contains(targetFileFull))
+                {
+                    Console.WriteLine($"Delete {targetFileFull}");
+                    File.Delete(targetFileFull);
+                }
+            }
+        }
+
+        private void DeleteEmptySubdirectories(string parentDirectory)
+        {
+            foreach (string directory in Directory.GetDirectories(parentDirectory))
+            {
+                DeleteEmptySubdirectories(directory);
+                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                {
+                    Console.WriteLine($"Delete {directory}");
+                    Directory.Delete(directory, false);
+                }
             }
         }
     }

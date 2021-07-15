@@ -117,3 +117,12 @@ Stream #0:0: Audio: mp3
 ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
            Encoder/Codec ^              ^ Profile (if applicable)
 ```
+
+## TODO?
+- [x] make basic functionality work
+- [x] add album art support
+- [x] add character limitation support
+- [x] add support for single-threaded writing for slow output devices
+- [ ] replace unsupported characters in tags
+- [ ] test on linux
+- [ ] split SyncService into more manageable parts
