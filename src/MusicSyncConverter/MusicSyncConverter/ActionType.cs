@@ -2,8 +2,9 @@
 {
     public enum ActionType
     {
-        Keep,
+        None,
         Copy,
-        ConvertToFallback
+        Transcode,
+        Remux
     }
 }

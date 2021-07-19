@@ -1,4 +1,4 @@
-﻿namespace MusicSyncConverter.Config
+﻿namespace MusicSyncConverter.Models
 {
     public class FileFormat
     {

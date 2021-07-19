@@ -38,8 +38,8 @@ _Should_ work on Linux and macOS as well, but is untested.
         ],
         "FallbackFormat": {
             "Extension": ".m4a",
-            "EncoderCodec": "aac", // as required by ffmpeg (-c:a aac)
-            "EncoderProfile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
+            "Codec": "aac", // as required by ffmpeg (-c:a aac)
+            "Profile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
             "Muxer": "ipod", // as required by ffmpeg (usually, this is the container format)
             "AdditionalFlags": "-movflags faststart", // additional arguments to pass to ffmpeg
             "Bitrate": 192, // kbit/s
@@ -123,6 +123,6 @@ ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
 - [x] add album art support
 - [x] add character limitation support
 - [x] add support for single-threaded writing for slow output devices
-- [ ] replace unsupported characters in tags
+- [x] replace unsupported characters in tags
 - [ ] test on linux
 - [ ] split SyncService into more manageable parts

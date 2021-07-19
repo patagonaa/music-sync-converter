@@ -21,8 +21,8 @@
         ],
         "FallbackFormat": {
             "Extension": ".m4a",
-            "EncoderCodec": "aac",
-            "EncoderProfile": "aac_low",
+            "Codec": "aac",
+            "Profile": "aac_low",
             "Muxer": "ipod",
             "AdditionalFlags": "-movflags faststart",
             "Bitrate": 192,

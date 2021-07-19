@@ -2,6 +2,7 @@
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -16,6 +17,20 @@ namespace MusicSyncConverter
 {
     class SyncService
     {
+        private static readonly IReadOnlyList<string> _supportedTags = new List<string>
+        {
+            "album",
+            "title",
+            "composer",
+            "genre",
+            "track",
+            "disc",
+            "date",
+            "artist",
+            "album_artist",
+            "comment"
+        };
+
         public async Task Run(SyncConfig config, CancellationToken cancellationToken)
         {
             //set up pipeline
@@ -95,7 +110,8 @@ namespace MusicSyncConverter
                     var path = file.FullName.Substring(sourceDirLength);
                     await files.SendAsync(new SourceFile
                     {
-                        Path = path,
+                        RelativePath = path,
+                        AbsolutePath = file.FullName,
                         ModifiedDate = file.LastWriteTime
                     });
                 }
@@ -111,7 +127,7 @@ namespace MusicSyncConverter
         {
             try
             {
-                var targetFilePath = Path.Combine(config.TargetDir, config.DeviceConfig.CharacterLimitations != null ? SanitizePath(config.DeviceConfig.CharacterLimitations, sourceFile.Path) : sourceFile.Path);
+                var targetFilePath = Path.Combine(config.TargetDir, config.DeviceConfig.CharacterLimitations != null ? SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true) : sourceFile.RelativePath);
                 string targetDirPath = Path.GetDirectoryName(targetFilePath);
 
                 var directoryInfo = new DirectoryInfo(targetDirPath);
@@ -132,15 +148,15 @@ namespace MusicSyncConverter
                     {
                         return new WorkItem
                         {
-                            ActionType = ActionType.Keep,
-                            SourceFile = sourceFile,
-                            TargetFilePath = targetInfo[0].FullName
+                            ActionType = ActionType.None,
+                            SourceFileInfo = sourceFile,
+                            TargetFileInfo = new TargetFileInfo(targetInfo[0].FullName)
                         };
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"Multiple potential existing target files for {sourceFile.Path}");
+                    Console.WriteLine($"Multiple potential existing target files for {sourceFile.RelativePath}");
                 }
                 return null;
             }
@@ -150,15 +166,15 @@ namespace MusicSyncConverter
             }
         }
 
-        private string SanitizePath(CharacterLimitations config, string path)
+        private string SanitizeText(CharacterLimitations config, string text, bool isPath)
         {
             var toReturn = new StringBuilder();
 
             var unsupportedChars = false;
 
-            foreach (var chr in path)
+            foreach (var chr in text)
             {
-                if (chr == Path.DirectorySeparatorChar || chr == '.')
+                if (isPath && (chr == Path.DirectorySeparatorChar || chr == '.'))
                 {
                     toReturn.Append(chr);
                     continue;
@@ -183,51 +199,128 @@ namespace MusicSyncConverter
 
             if (unsupportedChars)
             {
-                Console.WriteLine($"Warning: unsupported chars in {path}");
+                Console.WriteLine($"Warning: unsupported chars in {text}");
             }
 
-            var outStr = toReturn.ToString();
-            //if(path != outStr)
-            //{
-            //    Console.WriteLine($"{path} -> {outStr}");
-            //}
-            return outStr;
+            return toReturn.ToString();
         }
 
         private async Task<WorkItem> GetWorkItemCopyOrConvert(SyncConfig config, SourceFile sourceFile, string targetFilePath)
         {
-            var sourceExtension = Path.GetExtension(sourceFile.Path);
+            var sourceExtension = Path.GetExtension(sourceFile.RelativePath);
 
-            var supportedExtensionFormats = config.DeviceConfig.SupportedFormats.Where(x => x.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase));
-            if (supportedExtensionFormats.Any())
+            if (!config.SourceExtensions.Contains(sourceExtension))
             {
-                IMediaAnalysis mediaAnalysis;
-                try
-                {
-                    mediaAnalysis = await FFProbe.AnalyseAsync(Path.Combine(config.SourceDir, sourceFile.Path));
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error while FFProbe {sourceFile.Path}");
-                    return null;
-                }
-                var audioStream = mediaAnalysis.PrimaryAudioStream;
-                if (audioStream != null && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
+                return null;
+            }
+
+            IMediaAnalysis mediaAnalysis;
+            try
+            {
+                mediaAnalysis = await FFProbe.AnalyseAsync(sourceFile.AbsolutePath);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while FFProbe {sourceFile.AbsolutePath}: {ex}");
+                return null;
+            }
+
+            var tags = MapTags(mediaAnalysis, config.DeviceConfig.CharacterLimitations);
+
+            var audioStream = mediaAnalysis.PrimaryAudioStream;
+
+            if (audioStream == null)
+            {
+                Console.WriteLine($"Missing Audio stream: {sourceFile.AbsolutePath}");
+                return null;
+            }
+
+            if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
+            {
+                if (config.DeviceConfig.CharacterLimitations == null) // todo check specific tag compatibility?
                 {
                     return new WorkItem
                     {
                         ActionType = ActionType.Copy,
-                        SourceFile = sourceFile,
-                        TargetFilePath = targetFilePath
+                        SourceFileInfo = sourceFile,
+                        TargetFileInfo = new TargetFileInfo(targetFilePath)
+                    };
+                }
+                else
+                {
+                    return new WorkItem
+                    {
+                        ActionType = ActionType.Remux,
+                        SourceFileInfo = sourceFile,
+                        TargetFileInfo = new TargetFileInfo(targetFilePath)
+                        {
+                            EncoderInfo = GetEncoderInfoRemux(mediaAnalysis),
+                            Tags = tags
+                        }
                     };
                 }
             }
+
             return new WorkItem
             {
-                ActionType = ActionType.ConvertToFallback,
-                SourceFile = sourceFile,
-                TargetFilePath = Path.Combine(Path.GetDirectoryName(targetFilePath), Path.GetFileNameWithoutExtension(targetFilePath) + config.DeviceConfig.FallbackFormat.Extension)
+                ActionType = ActionType.Transcode,
+                SourceFileInfo = sourceFile,
+                TargetFileInfo = new TargetFileInfo(Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension))
+                {
+                    EncoderInfo = config.DeviceConfig.FallbackFormat,
+                    Tags = tags
+                }
             };
+        }
+
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis)
+        {
+            switch (mediaAnalysis.Format.FormatName)
+            {
+                case "mov,mp4,m4a,3gp,3g2,mj2":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "ipod",
+                        AdditionalFlags = "-movflags faststart",
+                        CoverCodec = "copy",
+                        Extension = ".m4a"
+                    };
+                case "mp3":
+                case "flac":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = mediaAnalysis.Format.FormatName,
+                        CoverCodec = "copy",
+                        Extension = "." + mediaAnalysis.Format.FormatName
+                    };
+                default:
+                    throw new ArgumentException($"don't know how to remux {mediaAnalysis.Format.FormatName}");
+            }
+        }
+
+        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, CharacterLimitations characterLimitations)
+        {
+            var toReturn = new Dictionary<string, string>();
+            foreach (var tag in mediaAnalysis.Format.Tags ?? new Dictionary<string, string>())
+            {
+                if (!_supportedTags.Contains(tag.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                toReturn[tag.Key] = SanitizeText(characterLimitations, tag.Value, false);
+            }
+            foreach (var tag in mediaAnalysis.PrimaryAudioStream.Tags ?? new Dictionary<string, string>())
+            {
+                if (!_supportedTags.Contains(tag.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                toReturn[tag.Key] = SanitizeText(characterLimitations, tag.Value, false);
+            }
+
+            return toReturn;
         }
 
         private bool IsSupported(IList<FileFormat> supportedFormats, string extension, string codec, string profile)
@@ -251,50 +344,57 @@ namespace MusicSyncConverter
                 OutputFile toReturn = null;
                 switch (workItem.ActionType)
                 {
-                    case ActionType.Keep:
-                        handledFiles.Add(workItem.TargetFilePath);
+                    case ActionType.None:
+                        handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
                         return null;
                     case ActionType.Copy:
                         {
-                            Console.WriteLine($"--> Read {workItem.SourceFile.Path}");
-                            handledFiles.Add(workItem.TargetFilePath);
+                            Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
+                            handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
                             toReturn = new OutputFile
                             {
-                                Path = workItem.TargetFilePath,
-                                ModifiedDate = workItem.SourceFile.ModifiedDate,
-                                Content = await File.ReadAllBytesAsync(Path.Combine(config.SourceDir, workItem.SourceFile.Path), cancellationToken)
+                                Path = workItem.TargetFileInfo.AbsolutePath,
+                                ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
+                                Content = await File.ReadAllBytesAsync(workItem.SourceFileInfo.AbsolutePath, cancellationToken)
                             };
-                            Console.WriteLine($"<-- Read {workItem.SourceFile.Path}");
+                            Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                             break;
                         }
-                    case ActionType.ConvertToFallback:
+                    case ActionType.Transcode:
+                    case ActionType.Remux:
                         {
-                            Console.WriteLine($"--> Convert {workItem.SourceFile.Path}");
-                            var fallbackFormat = config.DeviceConfig.FallbackFormat;
+                            Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
+                            var outputFormat = workItem.TargetFileInfo.EncoderInfo;
                             var tmpFileName = Path.Combine(Path.GetTempPath(), $"MusicSync.{Guid.NewGuid():D}.tmp");
                             try
                             {
                                 var args = FFMpegArguments
-                                    .FromFileInput(Path.Combine(config.SourceDir, workItem.SourceFile.Path))
+                                    .FromFileInput(workItem.SourceFileInfo.AbsolutePath)
                                     .OutputToFile(tmpFileName, true, x =>
                                     {
-                                        x
-                                            .WithAudioBitrate(fallbackFormat.Bitrate)
-                                            .WithAudioCodec(fallbackFormat.EncoderCodec);
+                                        x.WithAudioCodec(outputFormat.Codec);
 
-                                        if (!string.IsNullOrEmpty(fallbackFormat.EncoderProfile))
+                                        if (outputFormat.Bitrate.HasValue)
                                         {
-                                            x.WithArgument(new CustomArgument($"-profile:a {fallbackFormat.EncoderProfile}"));
+                                            x.WithAudioBitrate(outputFormat.Bitrate.Value);
                                         }
 
-                                        x.WithArgument(new CustomArgument("-map_metadata 0:s:0 -map_metadata 0:g")); // map flac and ogg tags to ID3
-
-                                        if (!string.IsNullOrEmpty(fallbackFormat.CoverCodec))
+                                        if (!string.IsNullOrEmpty(outputFormat.Profile))
                                         {
-                                            x.WithVideoCodec(fallbackFormat.CoverCodec);
-                                            if (fallbackFormat.MaxCoverSize != null)
+                                            x.WithArgument(new CustomArgument($"-profile:a {outputFormat.Profile}"));
+                                        }
+
+                                        foreach (var tag in workItem.TargetFileInfo.Tags)
+                                        {
+                                            x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
+                                        }
+
+                                        if (!string.IsNullOrEmpty(outputFormat.CoverCodec))
+                                        {
+                                            x.WithVideoCodec(outputFormat.CoverCodec);
+                                            if (outputFormat.MaxCoverSize != null)
                                             {
-                                                x.WithArgument(new CustomArgument($"-vf \"scale='min({fallbackFormat.MaxCoverSize.Value},iw)':min'({fallbackFormat.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
+                                                x.WithArgument(new CustomArgument($"-vf \"scale='min({outputFormat.MaxCoverSize.Value},iw)':min'({outputFormat.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
                                             }
                                         }
                                         else
@@ -302,11 +402,11 @@ namespace MusicSyncConverter
                                             x.DisableChannel(Channel.Video);
                                         }
 
-                                        x.ForceFormat(fallbackFormat.Muxer);
+                                        x.ForceFormat(outputFormat.Muxer);
 
-                                        if (!string.IsNullOrEmpty(fallbackFormat.AdditionalFlags))
+                                        if (!string.IsNullOrEmpty(outputFormat.AdditionalFlags))
                                         {
-                                            x.WithArgument(new CustomArgument(fallbackFormat.AdditionalFlags));
+                                            x.WithArgument(new CustomArgument(outputFormat.AdditionalFlags));
                                         }
                                     })
                                     .CancellableThrough(out var cancelFfmpeg);
@@ -315,11 +415,11 @@ namespace MusicSyncConverter
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                     .ProcessAsynchronously();
-                                handledFiles.Add(workItem.TargetFilePath);
+                                handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
                                 toReturn = new OutputFile
                                 {
-                                    Path = workItem.TargetFilePath,
-                                    ModifiedDate = workItem.SourceFile.ModifiedDate,
+                                    Path = workItem.TargetFileInfo.AbsolutePath,
+                                    ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
                                     Content = File.ReadAllBytes(tmpFileName)
                                 };
                             }
@@ -327,7 +427,7 @@ namespace MusicSyncConverter
                             {
                                 File.Delete(tmpFileName);
                             }
-                            Console.WriteLine($"<-- Convert {workItem.SourceFile.Path}");
+                            Console.WriteLine($"<-- {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
                             break;
                         }
                     default:
