@@ -127,7 +127,7 @@ namespace MusicSyncConverter
         {
             try
             {
-                var targetFilePath = Path.Combine(config.TargetDir, config.DeviceConfig.CharacterLimitations != null ? SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true) : sourceFile.RelativePath);
+                var targetFilePath = Path.Combine(config.TargetDir, SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true));
                 string targetDirPath = Path.GetDirectoryName(targetFilePath);
 
                 var directoryInfo = new DirectoryInfo(targetDirPath);
@@ -168,6 +168,8 @@ namespace MusicSyncConverter
 
         private string SanitizeText(CharacterLimitations config, string text, bool isPath)
         {
+            if (config == null)
+                return text;
             var toReturn = new StringBuilder();
 
             var unsupportedChars = false;
@@ -180,7 +182,7 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                var replacement = config.Replacements.FirstOrDefault(x => x.Char == chr);
+                var replacement = config.Replacements?.FirstOrDefault(x => x.Char == chr);
                 if (replacement != null)
                 {
                     toReturn.Append(replacement.Replacement);
