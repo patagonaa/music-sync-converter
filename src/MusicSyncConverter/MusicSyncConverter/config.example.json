@@ -14,9 +14,30 @@
                 "Codec": "wmav2"
             },
             {
+                "Extension": ".flac",
+                "Codec": "flac"
+            },
+            {
                 "Extension": ".m4a",
                 "Codec": "aac",
                 "Profile": "LC"
+            },
+            {
+                "Extension": ".m4a",
+                "Codec": "aac",
+                "Profile": "HE-AAC"
+            },
+            {
+                "Extension": ".opus",
+                "Codec": "opus"
+            },
+            {
+                "Extension": ".ogg",
+                "Codec": "vorbis"
+            },
+            {
+                "Extension": ".ogg",
+                "Codec": "opus"
             }
         ],
         "FallbackFormat": {

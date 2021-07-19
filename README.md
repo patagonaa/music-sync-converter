@@ -8,10 +8,10 @@ _Should_ work on Linux and macOS as well, but is untested.
 
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
-- Copy all MP3, WMA and AAC-LC files
-- Replace unsupported characters
-- Convert all unsupported files (Fall back to AAC-LC 192kbit/s)
-- Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
+- Copy/Remux all MP3, WMA and AAC-LC files
+- Replace unsupported characters (in directory and file names, and tag values)
+- Convert all unsupported files (fall back to AAC-LC 192kbit/s)
+- Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
 
 ```js

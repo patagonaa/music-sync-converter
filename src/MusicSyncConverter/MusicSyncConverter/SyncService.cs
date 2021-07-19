@@ -53,7 +53,7 @@ namespace MusicSyncConverter
             var compareBlock = new TransformManyBlock<SourceFile, WorkItem>(async x => new WorkItem[] { await Compare(config, x) }.Where(y => y != null), workerOptions);
 
             var handledFiles = new ConcurrentBag<string>();
-            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(config, x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
+            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
 
             compareBlock.LinkTo(handleBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -201,7 +201,7 @@ namespace MusicSyncConverter
 
             if (unsupportedChars)
             {
-                Console.WriteLine($"Warning: unsupported chars in {text}");
+                //Console.WriteLine($"Warning: unsupported chars in {text}");
             }
 
             return toReturn.ToString();
@@ -239,7 +239,7 @@ namespace MusicSyncConverter
 
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
             {
-                if (config.DeviceConfig.CharacterLimitations == null) // todo check specific tag compatibility?
+                if (config.DeviceConfig.CharacterLimitations == null) // todo check tag / albumart compatibility?
                 {
                     return new WorkItem
                     {
@@ -256,7 +256,7 @@ namespace MusicSyncConverter
                         SourceFileInfo = sourceFile,
                         TargetFileInfo = new TargetFileInfo(targetFilePath)
                         {
-                            EncoderInfo = GetEncoderInfoRemux(mediaAnalysis),
+                            EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension),
                             Tags = tags
                         }
                     };
@@ -275,30 +275,65 @@ namespace MusicSyncConverter
             };
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis)
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension)
         {
-            switch (mediaAnalysis.Format.FormatName)
+            // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
+            // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
+            switch (sourceExtension)
             {
-                case "mov,mp4,m4a,3gp,3g2,mj2":
+                case ".m4a":
                     return new EncoderInfo
                     {
                         Codec = "copy",
                         Muxer = "ipod",
                         AdditionalFlags = "-movflags faststart",
                         CoverCodec = "copy",
-                        Extension = ".m4a"
+                        Extension = sourceExtension
                     };
-                case "mp3":
-                case "flac":
+                case ".wma":
                     return new EncoderInfo
                     {
                         Codec = "copy",
-                        Muxer = mediaAnalysis.Format.FormatName,
+                        Muxer = "asf",
                         CoverCodec = "copy",
-                        Extension = "." + mediaAnalysis.Format.FormatName
+                        Extension = sourceExtension
                     };
+                case ".ogg":
+                case ".opus":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "ogg",
+                        CoverCodec = "copy",
+                        Extension = sourceExtension
+                    };
+                case ".mp3":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "mp3",
+                        CoverCodec = "copy",
+                        Extension = sourceExtension
+                    };
+                case ".flac":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "flac",
+                        CoverCodec = "copy",
+                        Extension = sourceExtension
+                    };
+                case ".wav":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "wav",
+                        CoverCodec = "copy",
+                        Extension = sourceExtension
+                    };
+
                 default:
-                    throw new ArgumentException($"don't know how to remux {mediaAnalysis.Format.FormatName}");
+                    throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis.Format.FormatName})");
             }
         }
 
@@ -339,7 +374,7 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<OutputFile> HandleWorkItem(SyncConfig config, WorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
+        private async Task<OutputFile> HandleWorkItem(WorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
@@ -385,7 +420,7 @@ namespace MusicSyncConverter
                                         {
                                             x.WithArgument(new CustomArgument($"-profile:a {outputFormat.Profile}"));
                                         }
-
+                                        x.WithoutMetadata();
                                         foreach (var tag in workItem.TargetFileInfo.Tags)
                                         {
                                             x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
@@ -411,8 +446,7 @@ namespace MusicSyncConverter
                                             x.WithArgument(new CustomArgument(outputFormat.AdditionalFlags));
                                         }
                                     })
-                                    .CancellableThrough(out var cancelFfmpeg);
-                                cancellationToken.Register(() => cancelFfmpeg());
+                                    .CancellableThrough(cancellationToken);
                                 cancellationToken.ThrowIfCancellationRequested();
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
