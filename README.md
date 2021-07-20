@@ -1,7 +1,6 @@
 # music-sync-converter
 Sync music for use on flash drives in car radios and such. Detect and convert unsupported files by extension, codec and profile.
-
-_Should_ work on Linux and macOS as well, but is untested.
+Works on Windows and Linux, macOS is untested.
 
 ## Usage:
 `.\MusicSyncConverter.exe config.json`
