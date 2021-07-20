@@ -90,7 +90,7 @@ namespace MusicSyncConverter
             cancellationToken.ThrowIfCancellationRequested();
             var sourceDirLength = config.SourceDir.TrimEnd(Path.DirectorySeparatorChar).Length + 1;
 
-            if (config.Exclude.Contains(dir.FullName.Substring(sourceDirLength)))
+            if (config.Exclude?.Contains(dir.FullName.Substring(sourceDirLength)) ?? false)
             {
                 return;
             }
