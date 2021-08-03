@@ -131,34 +131,34 @@ namespace MusicSyncConverter
                 string targetDirPath = Path.GetDirectoryName(targetFilePath);
 
                 var directoryInfo = new DirectoryInfo(targetDirPath);
-                var targetInfo = directoryInfo.Exists ? directoryInfo.GetFiles($"{Path.GetFileNameWithoutExtension(targetFilePath)}.*") : new FileInfo[0];
+                var targetInfos = directoryInfo.Exists ? directoryInfo.GetFiles($"{Path.GetFileNameWithoutExtension(targetFilePath)}.*") : new FileInfo[0];
 
-                if (targetInfo.Length == 0)
+                if (targetInfos.Length != 1) // zero or multiple target files
+                {
+                    // if there are multiple target files, delete them
+                    foreach (var targetInfo in targetInfos)
+                    {
+                        Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
+                        targetInfo.Delete();
+                    }
+                    return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
+                }
+
+                // only one target item, so check if it is up to date
+                var targetDate = targetInfos[0].LastWriteTime;
+                if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
                 {
                     return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
                 }
-                else if (targetInfo.Length == 1)
-                {
-                    var targetDate = targetInfo[0].LastWriteTime;
-                    if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
-                    {
-                        return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
-                    }
-                    else
-                    {
-                        return new WorkItem
-                        {
-                            ActionType = ActionType.None,
-                            SourceFileInfo = sourceFile,
-                            TargetFileInfo = new TargetFileInfo(targetInfo[0].FullName)
-                        };
-                    }
-                }
                 else
                 {
-                    Console.WriteLine($"Multiple potential existing target files for {sourceFile.RelativePath}");
+                    return new WorkItem
+                    {
+                        ActionType = ActionType.None,
+                        SourceFileInfo = sourceFile,
+                        TargetFileInfo = new TargetFileInfo(targetInfos[0].FullName)
+                    };
                 }
-                return null;
             }
             catch (Exception ex)
             {
@@ -172,31 +172,52 @@ namespace MusicSyncConverter
                 return text;
             var toReturn = new StringBuilder();
 
+            var pathUnsupportedChars = Path.GetInvalidFileNameChars();
+
             var unsupportedChars = false;
 
-            foreach (var chr in text)
+            foreach (var inChar in text)
             {
-                if (isPath && (chr == Path.DirectorySeparatorChar || chr == '.'))
+                // path seperator always allowed for path
+                if (isPath && (inChar == Path.DirectorySeparatorChar || inChar == '.'))
                 {
-                    toReturn.Append(chr);
+                    toReturn.Append(inChar);
                     continue;
                 }
 
-                var replacement = config.Replacements?.FirstOrDefault(x => x.Char == chr);
+                string toInsert;
+
+                var replacement = config.Replacements?.FirstOrDefault(x => x.Char == inChar);
                 if (replacement != null)
                 {
-                    toReturn.Append(replacement.Replacement);
-                    continue;
+                    toInsert = replacement.Replacement;
                 }
-
-                if (config.SupportedChars.Contains(chr))
+                else
                 {
-                    toReturn.Append(chr);
-                    continue;
+                    toInsert = inChar.ToString();
                 }
 
-                unsupportedChars = true;
-                toReturn.Append(chr);
+                foreach (var outChar in toInsert)
+                {
+
+                    // if this is a path, replace chars that are invalid for path names
+                    if (isPath && pathUnsupportedChars.Contains(outChar))
+                    {
+                        unsupportedChars = true;
+                        toReturn.Append('_');
+                    }
+                    else if (!config.SupportedChars.Contains(outChar))
+                    {
+                        // we just accept our faith and insert the character anyways
+                        unsupportedChars = true;
+                        toReturn.Append(outChar);
+                    }
+                    else
+                    {
+                        // char is supported
+                        toReturn.Append(outChar);
+                    }
+                }
             }
 
             if (unsupportedChars)
@@ -402,7 +423,9 @@ namespace MusicSyncConverter
                         {
                             Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
                             var outputFormat = workItem.TargetFileInfo.EncoderInfo;
-                            var tmpFileName = Path.Combine(Path.GetTempPath(), $"MusicSync.{Guid.NewGuid():D}.tmp");
+                            var tmpDir = Path.Combine(Path.GetTempPath(), "MusicSync");
+                            Directory.CreateDirectory(tmpDir);
+                            var tmpFileName = Path.Combine(tmpDir, $"{Guid.NewGuid():D}.tmp");
                             try
                             {
                                 var args = FFMpegArguments

@@ -123,5 +123,5 @@ ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
 - [x] add character limitation support
 - [x] add support for single-threaded writing for slow output devices
 - [x] replace unsupported characters in tags
-- [ ] test on linux
+- [x] test on linux
 - [ ] split SyncService into more manageable parts
