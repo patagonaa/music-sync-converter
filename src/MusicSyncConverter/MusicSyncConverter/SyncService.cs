@@ -1,6 +1,7 @@
 ﻿using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
+using FFMpegCore.Pipes;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
@@ -34,6 +35,14 @@ namespace MusicSyncConverter
         public async Task Run(SyncConfig config, CancellationToken cancellationToken)
         {
             //set up pipeline
+            var readOptions = new ExecutionDataflowBlockOptions
+            {
+                BoundedCapacity = 16,
+                MaxDegreeOfParallelism = config.WorkersRead,
+                EnsureOrdered = false,
+                CancellationToken = cancellationToken
+            };
+
             var workerOptions = new ExecutionDataflowBlockOptions
             {
                 BoundedCapacity = 16,
@@ -50,29 +59,31 @@ namespace MusicSyncConverter
                 CancellationToken = cancellationToken
             };
 
-            var compareBlock = new TransformManyBlock<SourceFile, WorkItem>(async x => new WorkItem[] { await Compare(config, x) }.Where(y => y != null), workerOptions);
-
             var handledFiles = new ConcurrentBag<string>();
-            var handleBlock = new TransformManyBlock<WorkItem, OutputFile>(async x => new OutputFile[] { await HandleWorkItem(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
 
-            compareBlock.LinkTo(handleBlock, new DataflowLinkOptions { PropagateCompletion = true });
-
+            var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(async x => new ReadWorkItem[] { await CompareDates(config, x, cancellationToken) }.Where(y => y != null), workerOptions);
+            var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
+            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new ConvertWorkItem[] { await Analyze(config, x) }.Where(y => y != null), workerOptions);
+            var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new OutputFile[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
             var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, cancellationToken), writeOptions);
 
-            handleBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+            compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
+            readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+            analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
+            convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding directories to check for changes
             var readDirsTask = ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
-            await Task.WhenAll(readDirsTask, compareBlock.Completion, handleBlock.Completion, writeBlock.Completion);
+            await Task.WhenAll(readDirsTask, compareBlock.Completion, readBlock.Completion, analyzeBlock.Completion, convertBlock.Completion, writeBlock.Completion);
 
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles);
             DeleteEmptySubdirectories(config.TargetDir);
         }
 
-        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFile> files, CancellationToken cancellationToken)
+        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> files, CancellationToken cancellationToken)
         {
             try
             {
@@ -85,7 +96,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task ReadDir(SyncConfig config, DirectoryInfo dir, ITargetBlock<SourceFile> files, CancellationToken cancellationToken)
+        private async Task ReadDir(SyncConfig config, DirectoryInfo dir, ITargetBlock<SourceFileInfo> files, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var sourceDirLength = config.SourceDir.TrimEnd(Path.DirectorySeparatorChar).Length + 1;
@@ -108,7 +119,7 @@ namespace MusicSyncConverter
                 if (config.SourceExtensions.Contains(file.Extension))
                 {
                     var path = file.FullName.Substring(sourceDirLength);
-                    await files.SendAsync(new SourceFile
+                    await files.SendAsync(new SourceFileInfo
                     {
                         RelativePath = path,
                         AbsolutePath = file.FullName,
@@ -123,7 +134,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task<WorkItem> Compare(SyncConfig config, SourceFile sourceFile)
+        private async Task<ReadWorkItem> CompareDates(SyncConfig config, SourceFileInfo sourceFile, CancellationToken cancellationToken)
         {
             try
             {
@@ -141,22 +152,32 @@ namespace MusicSyncConverter
                         Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
                         targetInfo.Delete();
                     }
-                    return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
+                    var sourceFileBytes = await File.ReadAllBytesAsync(sourceFile.AbsolutePath, cancellationToken);
+                    return new ReadWorkItem
+                    {
+                        ActionType = CompareResultType.Replace,
+                        SourceFileInfo = sourceFile
+                    };
                 }
 
                 // only one target item, so check if it is up to date
                 var targetDate = targetInfos[0].LastWriteTime;
                 if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
                 {
-                    return await GetWorkItemCopyOrConvert(config, sourceFile, targetFilePath);
+                    var sourceFileBytes = await File.ReadAllBytesAsync(sourceFile.AbsolutePath, cancellationToken);
+                    return new ReadWorkItem
+                    {
+                        ActionType = CompareResultType.Replace,
+                        SourceFileInfo = sourceFile
+                    };
                 }
                 else
                 {
-                    return new WorkItem
+                    return new ReadWorkItem
                     {
-                        ActionType = ActionType.None,
+                        ActionType = CompareResultType.Keep,
                         SourceFileInfo = sourceFile,
-                        TargetFileInfo = new TargetFileInfo(targetInfos[0].FullName)
+                        ExistingTargetFile = targetInfos[0].FullName
                     };
                 }
             }
@@ -164,6 +185,59 @@ namespace MusicSyncConverter
             {
                 throw;
             }
+        }
+
+        private async Task<AnalyzeWorkItem> Read(ReadWorkItem workItem, CancellationToken cancellationToken)
+        {
+            AnalyzeWorkItem toReturn;
+            switch (workItem.ActionType)
+            {
+                case CompareResultType.Keep:
+                    toReturn = new AnalyzeWorkItem
+                    {
+                        ActionType = AnalyzeActionType.Keep,
+                        SourceFileInfo = workItem.SourceFileInfo,
+                        ExistingTargetFile = workItem.ExistingTargetFile
+                    };
+                    break;
+                case CompareResultType.Replace:
+                    Console.WriteLine($"--> Read {workItem.SourceFileInfo.AbsolutePath}");
+                    toReturn = new AnalyzeWorkItem
+                    {
+                        ActionType = AnalyzeActionType.CopyOrConvert,
+                        SourceFileInfo = workItem.SourceFileInfo,
+                        SourceFileContents = await File.ReadAllBytesAsync(workItem.SourceFileInfo.AbsolutePath, cancellationToken)
+                    };
+                    Console.WriteLine($"<-- Read {workItem.SourceFileInfo.AbsolutePath}");
+                    break;
+                default:
+                    throw new ArgumentException("Invalid ReadActionType");
+            }
+            return toReturn;
+        }
+
+        private async Task<ConvertWorkItem> Analyze(SyncConfig config, AnalyzeWorkItem workItem)
+        {
+            ConvertWorkItem toReturn;
+            switch (workItem.ActionType)
+            {
+                case AnalyzeActionType.Keep:
+                    toReturn = new ConvertWorkItem
+                    {
+                        ActionType = ConvertActionType.Keep,
+                        SourceFileInfo = workItem.SourceFileInfo,
+                        TargetFilePath = workItem.ExistingTargetFile
+                    };
+                    break;
+                case AnalyzeActionType.CopyOrConvert:
+                    Console.WriteLine($"--> Analyze {workItem.SourceFileInfo.AbsolutePath}");
+                    toReturn = await GetWorkItemCopyOrConvert(config, workItem);
+                    Console.WriteLine($"<-- Analyze {workItem.SourceFileInfo.AbsolutePath}");
+                    break;
+                default:
+                    throw new ArgumentException("Invalid AnalyzeActionType");
+            }
+            return toReturn;
         }
 
         private string SanitizeText(CharacterLimitations config, string text, bool isPath)
@@ -228,9 +302,9 @@ namespace MusicSyncConverter
             return toReturn.ToString();
         }
 
-        private async Task<WorkItem> GetWorkItemCopyOrConvert(SyncConfig config, SourceFile sourceFile, string targetFilePath)
+        private async Task<ConvertWorkItem> GetWorkItemCopyOrConvert(SyncConfig config, AnalyzeWorkItem workItem)
         {
-            var sourceExtension = Path.GetExtension(sourceFile.RelativePath);
+            var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 
             if (!config.SourceExtensions.Contains(sourceExtension))
             {
@@ -240,11 +314,15 @@ namespace MusicSyncConverter
             IMediaAnalysis mediaAnalysis;
             try
             {
-                mediaAnalysis = await FFProbe.AnalyseAsync(sourceFile.AbsolutePath);
+                using (var ms = new MemoryStream(workItem.SourceFileContents))
+                {
+                    mediaAnalysis = await FFProbe.AnalyseAsync(ms);
+                }
+
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error while FFProbe {sourceFile.AbsolutePath}: {ex}");
+                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.AbsolutePath}: {ex}");
                 return null;
             }
 
@@ -254,45 +332,46 @@ namespace MusicSyncConverter
 
             if (audioStream == null)
             {
-                Console.WriteLine($"Missing Audio stream: {sourceFile.AbsolutePath}");
+                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.AbsolutePath}");
                 return null;
             }
+
+            var targetFilePath = Path.Combine(config.TargetDir, SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true));
 
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
             {
                 if (config.DeviceConfig.CharacterLimitations == null) // todo check tag / albumart compatibility?
                 {
-                    return new WorkItem
+                    return new ConvertWorkItem
                     {
-                        ActionType = ActionType.Copy,
-                        SourceFileInfo = sourceFile,
-                        TargetFileInfo = new TargetFileInfo(targetFilePath)
+                        ActionType = ConvertActionType.Copy,
+                        SourceFileInfo = workItem.SourceFileInfo,
+                        SourceFileContents = workItem.SourceFileContents,
+                        TargetFilePath = targetFilePath
                     };
                 }
                 else
                 {
-                    return new WorkItem
+                    return new ConvertWorkItem
                     {
-                        ActionType = ActionType.Remux,
-                        SourceFileInfo = sourceFile,
-                        TargetFileInfo = new TargetFileInfo(targetFilePath)
-                        {
-                            EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension),
-                            Tags = tags
-                        }
+                        ActionType = ConvertActionType.Remux,
+                        SourceFileInfo = workItem.SourceFileInfo,
+                        SourceFileContents = workItem.SourceFileContents,
+                        TargetFilePath = targetFilePath,
+                        EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension),
+                        Tags = tags
                     };
                 }
             }
 
-            return new WorkItem
+            return new ConvertWorkItem
             {
-                ActionType = ActionType.Transcode,
-                SourceFileInfo = sourceFile,
-                TargetFileInfo = new TargetFileInfo(Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension))
-                {
-                    EncoderInfo = config.DeviceConfig.FallbackFormat,
-                    Tags = tags
-                }
+                ActionType = ConvertActionType.Transcode,
+                SourceFileInfo = workItem.SourceFileInfo,
+                SourceFileContents = workItem.SourceFileContents,
+                TargetFilePath = Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension),
+                EncoderInfo = config.DeviceConfig.FallbackFormat,
+                Tags = tags
             };
         }
 
@@ -395,42 +474,43 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<OutputFile> HandleWorkItem(WorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
+        private async Task<OutputFile> Convert(ConvertWorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
                 OutputFile toReturn = null;
                 switch (workItem.ActionType)
                 {
-                    case ActionType.None:
-                        handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
+                    case ConvertActionType.Keep:
+                        handledFiles.Add(workItem.TargetFilePath);
                         return null;
-                    case ActionType.Copy:
+                    case ConvertActionType.Copy:
                         {
                             Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
-                            handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
+                            handledFiles.Add(workItem.TargetFilePath);
                             toReturn = new OutputFile
                             {
-                                Path = workItem.TargetFileInfo.AbsolutePath,
+                                Path = workItem.TargetFilePath,
                                 ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                Content = await File.ReadAllBytesAsync(workItem.SourceFileInfo.AbsolutePath, cancellationToken)
+                                Content = workItem.SourceFileContents
                             };
                             Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                             break;
                         }
-                    case ActionType.Transcode:
-                    case ActionType.Remux:
+                    case ConvertActionType.Transcode:
+                    case ConvertActionType.Remux:
                         {
                             Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
-                            var outputFormat = workItem.TargetFileInfo.EncoderInfo;
+                            var outputFormat = workItem.EncoderInfo;
                             var tmpDir = Path.Combine(Path.GetTempPath(), "MusicSync");
                             Directory.CreateDirectory(tmpDir);
                             var tmpFileName = Path.Combine(tmpDir, $"{Guid.NewGuid():D}.tmp");
+                            using var inputMs = new MemoryStream(workItem.SourceFileContents);
                             try
                             {
                                 var args = FFMpegArguments
-                                    .FromFileInput(workItem.SourceFileInfo.AbsolutePath)
-                                    .OutputToFile(tmpFileName, true, x =>
+                                    .FromPipeInput(new StreamPipeSource(inputMs))
+                                    .OutputToFile(tmpFileName, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
                                     {
                                         x.WithAudioCodec(outputFormat.Codec);
 
@@ -444,7 +524,7 @@ namespace MusicSyncConverter
                                             x.WithArgument(new CustomArgument($"-profile:a {outputFormat.Profile}"));
                                         }
                                         x.WithoutMetadata();
-                                        foreach (var tag in workItem.TargetFileInfo.Tags)
+                                        foreach (var tag in workItem.Tags)
                                         {
                                             x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
                                         }
@@ -474,10 +554,10 @@ namespace MusicSyncConverter
                                 await args
                                     //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
                                     .ProcessAsynchronously();
-                                handledFiles.Add(workItem.TargetFileInfo.AbsolutePath);
+                                handledFiles.Add(workItem.TargetFilePath);
                                 toReturn = new OutputFile
                                 {
-                                    Path = workItem.TargetFileInfo.AbsolutePath,
+                                    Path = workItem.TargetFilePath,
                                     ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
                                     Content = File.ReadAllBytes(tmpFileName)
                                 };

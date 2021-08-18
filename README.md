@@ -94,7 +94,8 @@ Works on Windows and Linux, macOS is untested.
         "Webradio",
         "Music\\Albums\\Nickelback"
     ],
-    "WorkersConvert": 8, // max number of threads to use for reading / converting files
+    "WorkersRead": 8, // max number of threads to use for reading files
+    "WorkersConvert": 8, // max number of threads to use for converting files
     "WorkersWrite": 1 // max number of threads to use for writing (for slow devices like HDDs, SD cards or flash drives, 1 is usually best)
 }
 ```

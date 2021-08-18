@@ -1,5 +1,4 @@
-﻿using MusicSyncConverter.Models;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace MusicSyncConverter.Models
 {
@@ -10,7 +9,5 @@ namespace MusicSyncConverter.Models
             AbsolutePath = absolutePath;
         }
         public string AbsolutePath { get; } // E:/Audio/Music/Test.mp3
-        public EncoderInfo EncoderInfo { get; set; }
-        public Dictionary<string, string> Tags { get; set; }
     }
 }

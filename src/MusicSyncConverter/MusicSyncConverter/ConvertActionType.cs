@@ -1,8 +1,8 @@
 ﻿namespace MusicSyncConverter
 {
-    public enum ActionType
+    public enum ConvertActionType
     {
-        None,
+        Keep,
         Copy,
         Transcode,
         Remux

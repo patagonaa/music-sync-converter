@@ -65,6 +65,7 @@
         "Webradio",
         "Musik\\Albums\\Nickelback"
     ],
+    "WorkersRead": 8,
     "WorkersConvert": 8,
     "WorkersWrite": 1
 }
