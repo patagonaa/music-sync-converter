@@ -1,12 +1,12 @@
 ﻿using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
-using FFMpegCore.Pipes;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -37,7 +37,7 @@ namespace MusicSyncConverter
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = 16,
+                BoundedCapacity = Math.Max(16, config.WorkersRead),
                 MaxDegreeOfParallelism = config.WorkersRead,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -45,7 +45,7 @@ namespace MusicSyncConverter
 
             var workerOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = 16,
+                BoundedCapacity = Math.Max(8, config.WorkersConvert),
                 MaxDegreeOfParallelism = config.WorkersConvert,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -53,7 +53,7 @@ namespace MusicSyncConverter
 
             var writeOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = 8,
+                BoundedCapacity = Math.Max(8, config.WorkersWrite),
                 MaxDegreeOfParallelism = config.WorkersWrite,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -152,7 +152,6 @@ namespace MusicSyncConverter
                         Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
                         targetInfo.Delete();
                     }
-                    var sourceFileBytes = await File.ReadAllBytesAsync(sourceFile.AbsolutePath, cancellationToken);
                     return new ReadWorkItem
                     {
                         ActionType = CompareResultType.Replace,
@@ -164,7 +163,6 @@ namespace MusicSyncConverter
                 var targetDate = targetInfos[0].LastWriteTime;
                 if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
                 {
-                    var sourceFileBytes = await File.ReadAllBytesAsync(sourceFile.AbsolutePath, cancellationToken);
                     return new ReadWorkItem
                     {
                         ActionType = CompareResultType.Replace,
@@ -202,11 +200,29 @@ namespace MusicSyncConverter
                     break;
                 case CompareResultType.Replace:
                     Console.WriteLine($"--> Read {workItem.SourceFileInfo.AbsolutePath}");
+
+                    // i'm not sure if this is smart or dumb but it definitely improves performance in cases where the source drive is slow and the system drive is fast
+                    string tmpFilePath = GetTempFilePath();
+                    using (var tmpFile = File.Create(tmpFilePath))
+                    {
+                        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                        {
+                            // this should in theory cause Windows to try to keep the file contents in RAM instead of writing to disk
+                            // on linux/unix this should be tmpfs anyway
+                            File.SetAttributes(tmpFilePath, FileAttributes.Temporary);
+                        }
+
+                        using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
+                        {
+                            await inFile.CopyToAsync(tmpFile, cancellationToken);
+                        }
+                    }
+
                     toReturn = new AnalyzeWorkItem
                     {
                         ActionType = AnalyzeActionType.CopyOrConvert,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        SourceFileContents = await File.ReadAllBytesAsync(workItem.SourceFileInfo.AbsolutePath, cancellationToken)
+                        SourceTempFilePath = tmpFilePath
                     };
                     Console.WriteLine($"<-- Read {workItem.SourceFileInfo.AbsolutePath}");
                     break;
@@ -314,11 +330,7 @@ namespace MusicSyncConverter
             IMediaAnalysis mediaAnalysis;
             try
             {
-                using (var ms = new MemoryStream(workItem.SourceFileContents))
-                {
-                    mediaAnalysis = await FFProbe.AnalyseAsync(ms);
-                }
-
+                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath ?? workItem.SourceFileInfo.AbsolutePath);
             }
             catch (Exception ex)
             {
@@ -346,7 +358,7 @@ namespace MusicSyncConverter
                     {
                         ActionType = ConvertActionType.Copy,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        SourceFileContents = workItem.SourceFileContents,
+                        SourceTempFilePath = workItem.SourceTempFilePath,
                         TargetFilePath = targetFilePath
                     };
                 }
@@ -356,7 +368,7 @@ namespace MusicSyncConverter
                     {
                         ActionType = ConvertActionType.Remux,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        SourceFileContents = workItem.SourceFileContents,
+                        SourceTempFilePath = workItem.SourceTempFilePath,
                         TargetFilePath = targetFilePath,
                         EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension),
                         Tags = tags
@@ -368,7 +380,7 @@ namespace MusicSyncConverter
             {
                 ActionType = ConvertActionType.Transcode,
                 SourceFileInfo = workItem.SourceFileInfo,
-                SourceFileContents = workItem.SourceFileContents,
+                SourceTempFilePath = workItem.SourceTempFilePath,
                 TargetFilePath = Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension),
                 EncoderInfo = config.DeviceConfig.FallbackFormat,
                 Tags = tags
@@ -492,7 +504,7 @@ namespace MusicSyncConverter
                             {
                                 Path = workItem.TargetFilePath,
                                 ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                Content = workItem.SourceFileContents
+                                Content = await File.ReadAllBytesAsync(workItem.SourceTempFilePath, cancellationToken)
                             };
                             Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                             break;
@@ -500,17 +512,17 @@ namespace MusicSyncConverter
                     case ConvertActionType.Transcode:
                     case ConvertActionType.Remux:
                         {
+                            var sw = Stopwatch.StartNew();
                             Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
                             var outputFormat = workItem.EncoderInfo;
-                            var tmpDir = Path.Combine(Path.GetTempPath(), "MusicSync");
-                            Directory.CreateDirectory(tmpDir);
-                            var tmpFileName = Path.Combine(tmpDir, $"{Guid.NewGuid():D}.tmp");
-                            using var inputMs = new MemoryStream(workItem.SourceFileContents);
+                            var outFilePath = GetTempFilePath();
                             try
                             {
+
                                 var args = FFMpegArguments
-                                    .FromPipeInput(new StreamPipeSource(inputMs))
-                                    .OutputToFile(tmpFileName, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
+                                    //.FromPipeInput(new StreamPipeSource(inputMs))
+                                    .FromFileInput(workItem.SourceTempFilePath ?? workItem.SourceFileInfo.AbsolutePath)
+                                    .OutputToFile(outFilePath, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
                                     {
                                         x.WithAudioCodec(outputFormat.Codec);
 
@@ -552,21 +564,23 @@ namespace MusicSyncConverter
                                     .CancellableThrough(cancellationToken);
                                 cancellationToken.ThrowIfCancellationRequested();
                                 await args
-                                    //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFile.Path} {x.ToString()}"))
+                                    //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFileInfo.AbsolutePath} {x.ToString()}"))
                                     .ProcessAsynchronously();
+                                cancellationToken.ThrowIfCancellationRequested();
                                 handledFiles.Add(workItem.TargetFilePath);
                                 toReturn = new OutputFile
                                 {
                                     Path = workItem.TargetFilePath,
                                     ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                    Content = File.ReadAllBytes(tmpFileName)
+                                    Content = File.ReadAllBytes(outFilePath)
                                 };
                             }
                             finally
                             {
-                                File.Delete(tmpFileName);
+                                File.Delete(outFilePath);
                             }
-                            Console.WriteLine($"<-- {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
+                            sw.Stop();
+                            Console.WriteLine($"<-- {workItem.ActionType} {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.RelativePath}");
                             break;
                         }
                     default:
@@ -582,7 +596,21 @@ namespace MusicSyncConverter
                     throw;
                 }
             }
+            finally
+            {
+                if (workItem.SourceTempFilePath != null)
+                {
+                    File.Delete(workItem.SourceTempFilePath);
+                }
+            }
             return null;
+        }
+
+        private string GetTempFilePath()
+        {
+            var tmpDir = Path.Combine(Path.GetTempPath(), "MusicSync");
+            Directory.CreateDirectory(tmpDir);
+            return Path.Combine(tmpDir, $"{Guid.NewGuid():D}.tmp");
         }
 
         private async Task WriteFile(OutputFile file, CancellationToken cancellationToken)

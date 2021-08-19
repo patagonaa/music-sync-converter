@@ -6,7 +6,7 @@ namespace MusicSyncConverter.Models
     {
         public ConvertActionType ActionType { get; set; }
         public SourceFileInfo SourceFileInfo { get; set; }
-        public byte[] SourceFileContents { get; set; }
+        public string SourceTempFilePath { get; set; }
         public string TargetFilePath { get; set; }
         public EncoderInfo EncoderInfo { get; set; }
         public Dictionary<string, string> Tags { get; set; }
