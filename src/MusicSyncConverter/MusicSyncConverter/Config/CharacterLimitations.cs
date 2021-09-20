@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace MusicSyncConverter.Config
+﻿namespace MusicSyncConverter.Config
 {
     public class CharacterLimitations
     {
