@@ -101,13 +101,14 @@ namespace MusicSyncConverter
                 }
                 else
                 {
+                    var copyAlbumArt = !string.IsNullOrEmpty(config.DeviceConfig.FallbackFormat.CoverCodec); // only copy album art if we want it
                     return new ConvertWorkItem
                     {
                         ActionType = ConvertActionType.Remux,
                         SourceFileInfo = workItem.SourceFileInfo,
                         SourceTempFilePath = workItem.SourceTempFilePath,
                         TargetFilePath = targetFilePath,
-                        EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension),
+                        EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, copyAlbumArt),
                         Tags = tags
                     };
                 }
@@ -124,8 +125,9 @@ namespace MusicSyncConverter
             };
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension)
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, bool copyAlbumArt)
         {
+            var coverCodec = copyAlbumArt ? "copy" : null;
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
             switch (sourceExtension)
@@ -136,7 +138,7 @@ namespace MusicSyncConverter
                         Codec = "copy",
                         Muxer = "ipod",
                         AdditionalFlags = "-movflags faststart",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
                 case ".wma":
@@ -144,7 +146,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "asf",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
                 case ".ogg":
@@ -153,7 +155,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "ogg",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
                 case ".mp3":
@@ -161,7 +163,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "mp3",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
                 case ".flac":
@@ -169,7 +171,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "flac",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
                 case ".wav":
@@ -177,7 +179,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "wav",
-                        CoverCodec = "copy",
+                        CoverCodec = coverCodec,
                         Extension = sourceExtension
                     };
 
