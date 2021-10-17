@@ -68,7 +68,7 @@ namespace MusicSyncConverter
             var readDirsTask = ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
-            await Task.WhenAll(readDirsTask, compareBlock.Completion, readBlock.Completion, analyzeBlock.Completion, convertBlock.Completion, writeBlock.Completion);
+            await writeBlock.Completion;
 
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles);
