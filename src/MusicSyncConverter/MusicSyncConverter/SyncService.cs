@@ -68,7 +68,7 @@ namespace MusicSyncConverter
             var readDirsTask = ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
-            await Task.WhenAll(readDirsTask, compareBlock.Completion, readBlock.Completion, analyzeBlock.Completion, convertBlock.Completion, writeBlock.Completion);
+            await writeBlock.Completion;
 
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles);
@@ -321,6 +321,14 @@ namespace MusicSyncConverter
                 {
                     Console.WriteLine($"Delete {targetFileFull}");
                     File.Delete(targetFileFull);
+
+                    // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
+                    // https://twitter.com/patagona/status/1444626808935264261
+                    if (File.Exists(targetFileFull))
+                    {
+                        File.Delete(targetFileFull);
+                        Console.WriteLine($"Couldn't delete {targetFileFull} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
+                    }
                 }
             }
         }
