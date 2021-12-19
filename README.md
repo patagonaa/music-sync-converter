@@ -8,8 +8,8 @@ Works on Windows and Linux, macOS is untested.
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
 - Copy/Remux all MP3, WMA and AAC-LC files
-- Replace unsupported characters (in directory and file names, and tag values)
 - Convert all unsupported files (fall back to AAC-LC 192kbit/s)
+- Replace unsupported characters (in directory and file names, and tag values)
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
 
@@ -100,6 +100,8 @@ Works on Windows and Linux, macOS is untested.
 }
 ```
 
+You can also split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
+
 "as reported by ffprobe" =>
 ```
 Stream #0:0(und): Audio: aac (LC) (mp4a)
@@ -125,4 +127,4 @@ ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
 - [x] add support for single-threaded writing for slow output devices
 - [x] replace unsupported characters in tags
 - [x] test on linux
-- [ ] split SyncService into more manageable parts
+- [x] split SyncService into more manageable parts

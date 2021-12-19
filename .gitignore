@@ -3,4 +3,4 @@ bin/
 obj/
 .vscode
 .vs
-src/MusicSyncConverter/MusicSyncConverter/config.json
+src/MusicSyncConverter/MusicSyncConverter/configs/config.json

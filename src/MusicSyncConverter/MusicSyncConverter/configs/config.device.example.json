@@ -50,22 +50,5 @@
             "CoverCodec": "mjpeg",
             "MaxCoverSize": 320
         }
-    },
-    "SourceDir": "Z:\\Audio\\",
-    "SourceExtensions": [
-        ".mp3",
-        ".ogg",
-        ".m4a",
-        ".flac",
-        ".opus",
-        ".wav"
-    ],
-    "TargetDir": "E:\\Audio",
-    "Exclude": [
-        "Webradio",
-        "Musik\\Albums\\Nickelback"
-    ],
-    "WorkersRead": 8,
-    "WorkersConvert": 8,
-    "WorkersWrite": 1
+    }
 }

@@ -2,7 +2,7 @@
   "profiles": {
     "MusicSyncConverter": {
       "commandName": "Project",
-      "commandLineArgs": "config.json"
+      "commandLineArgs": "configs/config.device.KD-X472DBT.json configs/config.json"
     }
   }
 }

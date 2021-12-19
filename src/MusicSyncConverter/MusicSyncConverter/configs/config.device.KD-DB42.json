@@ -1,0 +1,79 @@
+{
+    "DeviceConfig": {
+        "SupportedFormats": [
+            {
+                "Extension": ".mp3",
+                "Codec": "mp3"
+            }
+        ],
+        "FallbackFormat": {
+            "Extension": ".mp3",
+            "Codec": "libmp3lame",
+            "Muxer": "mp3",
+            "Bitrate": 192,
+            "CoverCodec": null,
+            "MaxCoverSize": null
+        },
+        "CharacterLimitations": {
+            "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±´",
+            "Replacements": [
+                {
+                    "Char": "ä",
+                    "Replacement": "ae"
+                },
+                {
+                    "Char": "Ä",
+                    "Replacement": "Ae"
+                },
+                {
+                    "Char": "ö",
+                    "Replacement": "oe"
+                },
+                {
+                    "Char": "Ö",
+                    "Replacement": "Oe"
+                },
+                {
+                    "Char": "ü",
+                    "Replacement": "ue"
+                },
+                {
+                    "Char": "Ü",
+                    "Replacement": "Ue"
+                },
+                {
+                    "Char": "ß",
+                    "Replacement": "ss"
+                },
+                {
+                    "Char": "å",
+                    "Replacement": "aa"
+                },
+                {
+                    "Char": "Å",
+                    "Replacement": "Aa"
+                },
+                {
+                    "Char": "²",
+                    "Replacement": "2"
+                },
+                {
+                    "Char": "³",
+                    "Replacement": "3"
+                },
+                {
+                    "Char": "♥",
+                    "Replacement": "<3"
+                },
+                {
+                    "Char": "×",
+                    "Replacement": "x"
+                },
+                {
+                    "Char": "½",
+                    "Replacement": "1/2"
+                }
+            ]
+        }
+    }
+}

@@ -12,15 +12,19 @@ namespace MusicSyncConverter
     {
         static async Task Main(string[] args)
         {
-            if (args.Length != 1)
+            if (args.Length < 1)
             {
-                Console.WriteLine("no config file supplied!");
+                Console.WriteLine("no config file(s) supplied!");
                 return;
             }
 
-            var configRoot = new ConfigurationBuilder()
-                .AddJsonFile(args[0])
-                .Build();
+            var configBuilder = new ConfigurationBuilder();
+            foreach (var configPath in args)
+            {
+                configBuilder.AddJsonFile(configPath);
+            }
+
+            var configRoot = configBuilder.Build();
 
             var config = configRoot.Get<SyncConfig>();
 
