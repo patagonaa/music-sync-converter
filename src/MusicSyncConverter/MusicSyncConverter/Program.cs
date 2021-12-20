@@ -38,7 +38,8 @@ namespace MusicSyncConverter
                         ".flac",
                         ".opus",
                         ".wma",
-                        ".wav"
+                        ".wav",
+                        ".aac"
                     };
             }
 

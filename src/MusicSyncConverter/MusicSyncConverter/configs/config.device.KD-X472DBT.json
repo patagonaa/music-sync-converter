@@ -11,6 +11,11 @@
                 "Profile": "LC"
             },
             {
+                "Extension": ".aac",
+                "Codec": "aac",
+                "Profile": "LC"
+            },
+            {
                 "Extension": ".flac",
                 "Codec": "flac"
             },

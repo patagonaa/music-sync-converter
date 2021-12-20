@@ -108,7 +108,7 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                if (config.SourceExtensions.Contains(file.Extension))
+                if (config.SourceExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase))
                 {
                     var path = file.FullName.Substring(sourceDirLength);
                     await files.SendAsync(new SourceFileInfo

@@ -59,7 +59,7 @@ namespace MusicSyncConverter
         {
             var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 
-            if (!config.SourceExtensions.Contains(sourceExtension))
+            if (!config.SourceExtensions.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
             {
                 return null;
             }
@@ -130,7 +130,7 @@ namespace MusicSyncConverter
             var coverCodec = copyAlbumArt ? "copy" : null;
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
-            switch (sourceExtension)
+            switch (sourceExtension.ToLowerInvariant())
             {
                 case ".m4a":
                     return new EncoderInfo
@@ -139,6 +139,14 @@ namespace MusicSyncConverter
                         Muxer = "ipod",
                         AdditionalFlags = "-movflags faststart",
                         CoverCodec = coverCodec,
+                        Extension = sourceExtension
+                    };
+                case ".aac":
+                    return new EncoderInfo
+                    {
+                        Codec = "copy",
+                        Muxer = "adts",
+                        CoverCodec = null,
                         Extension = sourceExtension
                     };
                 case ".wma":
@@ -179,7 +187,7 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "wav",
-                        CoverCodec = coverCodec,
+                        CoverCodec = null,
                         Extension = sourceExtension
                     };
 
