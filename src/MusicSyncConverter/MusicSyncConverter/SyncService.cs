@@ -51,6 +51,8 @@ namespace MusicSyncConverter
                 CancellationToken = cancellationToken
             };
 
+            var targetCaseSensitive = IsCaseSensitive(config.TargetDir);
+
             var handledFiles = new ConcurrentBag<string>();
 
             var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new ReadWorkItem[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
@@ -71,8 +73,25 @@ namespace MusicSyncConverter
             await writeBlock.Completion;
 
             // delete additional files and empty directories
-            DeleteAdditionalFiles(config, handledFiles);
+            DeleteAdditionalFiles(config, handledFiles, targetCaseSensitive, cancellationToken);
             DeleteEmptySubdirectories(config.TargetDir);
+        }
+
+        private bool IsCaseSensitive(string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+            var path1 = Path.Combine(targetDir, "test.tmp");
+            var path2 = Path.Combine(targetDir, "TEST.tmp");
+            File.Delete(path1);
+            File.Delete(path2);
+            using (File.Create(path1))
+            {
+            }
+
+            var toReturn = !File.Exists(path2);
+
+            File.Delete(path1);
+            return toReturn;
         }
 
         private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> files, CancellationToken cancellationToken)
@@ -297,7 +316,7 @@ namespace MusicSyncConverter
             {
                 Console.WriteLine($"--> Write {file.Path}");
                 Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
-                File.Delete(file.Path); // delete the file if it exists to avoid case sensitivity issues
+                File.Delete(file.Path); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
                 await File.WriteAllBytesAsync(file.Path, file.Content, cancellationToken);
                 File.SetLastWriteTime(file.Path, file.ModifiedDate);
                 Console.WriteLine($"<-- Write {file.Path}");
@@ -313,11 +332,12 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles)
+        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles, bool targetCaseSensitive, CancellationToken cancellationToken)
         {
             foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
             {
-                if (!handledFiles.Contains(targetFileFull))
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!handledFiles.Contains(targetFileFull, targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"Delete {targetFileFull}");
                     File.Delete(targetFileFull);
