@@ -32,7 +32,7 @@
             "MaxCoverSize": null
         },
         "CharacterLimitations": {
-            "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±´АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯЁабвгдежзийклмнопрстуфхцчшщъыьэюяё",
+            "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±´×ßЁАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяё",
             "Replacements": [
                 {
                     "Char": "ä",
@@ -59,10 +59,6 @@
                     "Replacement": "Ue"
                 },
                 {
-                    "Char": "ß",
-                    "Replacement": "ss"
-                },
-                {
                     "Char": "å",
                     "Replacement": "aa"
                 },
@@ -83,14 +79,11 @@
                     "Replacement": "<3"
                 },
                 {
-                    "Char": "×",
-                    "Replacement": "x"
-                },
-                {
                     "Char": "½",
                     "Replacement": "1/2"
                 }
-            ]
+            ],
+            "NormalizeCase": true
         }
     }
 }

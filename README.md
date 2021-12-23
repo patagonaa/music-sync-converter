@@ -12,6 +12,7 @@ Works on Windows and Linux, macOS is untested.
 - Replace unsupported characters (in directory and file names, and tag values)
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
+- Change every first character of file/dir names to uppercase so things that sort case-sensitive work properly
 
 ```js
 {
@@ -77,7 +78,8 @@ Works on Windows and Linux, macOS is untested.
                     "Replacement": "ss"
                 }
             ]
-        }
+        },
+        "NormalizeCase": true // change every first character of file/dir names to uppercase
     },
     "SourceDir": "Z:\\Audio\\",
     "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
