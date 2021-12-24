@@ -57,12 +57,13 @@ namespace MusicSyncConverter
             var targetCaseSensitive = IsCaseSensitive(config.TargetDir);
 
             var handledFiles = new ConcurrentBag<string>();
+            var updatedDirs = new ConcurrentBag<string>();
 
             var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new ReadWorkItem[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
             var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
             var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new ConvertWorkItem[] { await _analyzer.Analyze(config, x) }.Where(y => y != null), workerOptions);
             var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new OutputFile[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
-            var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, cancellationToken), writeOptions);
+            var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, updatedDirs, cancellationToken), writeOptions);
 
             compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
             readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -91,7 +92,10 @@ namespace MusicSyncConverter
             DeleteAdditionalFiles(config, handledFiles, targetCaseSensitive, cancellationToken);
             DeleteEmptySubdirectories(config.TargetDir);
 
-            _fatSorter.Sort(config.TargetDir, config.DeviceConfig.FatSortMode, cancellationToken);
+            foreach (var updatedDir in updatedDirs.Distinct(targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Length))
+            {
+                _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
+            }
         }
 
         private bool IsCaseSensitive(string targetDir)
@@ -316,12 +320,23 @@ namespace MusicSyncConverter
             return null;
         }
 
-        private async Task WriteFile(OutputFile file, CancellationToken cancellationToken)
+        private async Task WriteFile(OutputFile file, ConcurrentBag<string> updatedDirectories, CancellationToken cancellationToken)
         {
             try
             {
                 Console.WriteLine($"--> Write {file.Path}");
-                Directory.CreateDirectory(Path.GetDirectoryName(file.Path));
+                var directory = Path.GetDirectoryName(file.Path);
+
+                var dirInfo = new DirectoryInfo(directory);
+                updatedDirectories.Add(dirInfo.FullName);
+                do
+                {
+                    dirInfo = dirInfo.Parent;
+                    updatedDirectories.Add(dirInfo.FullName);
+                } while (!dirInfo.Exists);
+
+                Directory.CreateDirectory(directory);
+
                 File.Delete(file.Path); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
                 await File.WriteAllBytesAsync(file.Path, file.Content, cancellationToken);
                 File.SetLastWriteTime(file.Path, file.ModifiedDate);

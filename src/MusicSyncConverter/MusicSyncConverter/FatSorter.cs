@@ -8,23 +8,26 @@ namespace MusicSyncConverter
 {
     public class FatSorter
     {
-        public void Sort(string path, FatSortMode sortMode, CancellationToken cancellationToken)
+        public void Sort(string path, FatSortMode sortMode, bool recurse, CancellationToken cancellationToken)
         {
             if (path == null || !Directory.Exists(path) || sortMode == FatSortMode.None)
             {
                 return;
             }
 
-            SortInternal(new DirectoryInfo(path), sortMode, cancellationToken);
+            SortInternal(new DirectoryInfo(path), sortMode, recurse, cancellationToken);
         }
 
-        private void SortInternal(DirectoryInfo directory, FatSortMode sortMode, CancellationToken cancellationToken)
+        private void SortInternal(DirectoryInfo directory, FatSortMode sortMode, bool recurse, CancellationToken cancellationToken)
         {
             var entries = directory.GetFileSystemInfos();
 
-            foreach (var subdir in entries.OfType<DirectoryInfo>())
+            if (recurse)
             {
-                SortInternal(subdir, sortMode, cancellationToken);
+                foreach (var subdir in entries.OfType<DirectoryInfo>())
+                {
+                    SortInternal(subdir, sortMode, recurse, cancellationToken);
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
