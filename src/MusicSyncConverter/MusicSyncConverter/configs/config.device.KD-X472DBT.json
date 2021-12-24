@@ -84,6 +84,7 @@
                 }
             ],
             "NormalizeCase": true
-        }
+        },
+        "FatSortMode": "Folders"
     }
 }

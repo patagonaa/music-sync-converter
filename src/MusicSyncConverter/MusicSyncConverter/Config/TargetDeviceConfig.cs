@@ -8,5 +8,6 @@ namespace MusicSyncConverter.Config
         public IList<FileFormat> SupportedFormats { get; set; }
         public EncoderInfo FallbackFormat { get; set; }
         public CharacterLimitations CharacterLimitations { get; set; }
+        public FatSortMode FatSortMode { get; set; } = FatSortMode.None;
     }
 }

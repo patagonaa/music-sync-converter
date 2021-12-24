@@ -17,12 +17,14 @@ namespace MusicSyncConverter
         private readonly TextSanitizer _sanitizer;
         private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
+        private readonly FatSorter _fatSorter;
 
         public SyncService()
         {
             _sanitizer = new TextSanitizer();
             _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
+            _fatSorter = new FatSorter();
         }
 
         public async Task Run(SyncConfig config, CancellationToken cancellationToken)
@@ -67,7 +69,7 @@ namespace MusicSyncConverter
             analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-            // start pipeline by adding directories to check for changes
+            // start pipeline by adding files to check for changes
             try
             {
                 var r = new Random();
@@ -88,6 +90,8 @@ namespace MusicSyncConverter
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles, targetCaseSensitive, cancellationToken);
             DeleteEmptySubdirectories(config.TargetDir);
+
+            _fatSorter.Sort(config.TargetDir, config.DeviceConfig.FatSortMode, cancellationToken);
         }
 
         private bool IsCaseSensitive(string targetDir)

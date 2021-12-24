@@ -13,6 +13,7 @@ Works on Windows and Linux, macOS is untested.
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
 - Change every first character of file/dir names to uppercase so things that sort case-sensitive work properly
+- Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 
 ```js
 {
@@ -77,9 +78,10 @@ Works on Windows and Linux, macOS is untested.
                     "Char": "ß",
                     "Replacement": "ss"
                 }
-            ]
+            ],
+            "NormalizeCase": true // change every first character of file/dir names to uppercase
         },
-        "NormalizeCase": true // change every first character of file/dir names to uppercase
+        "FatSortMode": "Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders"
     },
     "SourceDir": "Z:\\Audio\\",
     "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
