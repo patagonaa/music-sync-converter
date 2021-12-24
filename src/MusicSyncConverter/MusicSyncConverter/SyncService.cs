@@ -2,6 +2,7 @@
 using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -67,7 +68,19 @@ namespace MusicSyncConverter
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding directories to check for changes
-            var readDirsTask = ReadDirs(config, compareBlock, cancellationToken);
+            try
+            {
+                var r = new Random();
+                foreach (var dir in ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken).OrderBy(x => r.Next()))
+                {
+                    await compareBlock.SendAsync(dir);
+                }
+                compareBlock.Complete();
+            }
+            catch (Exception ex)
+            {
+                ((ITargetBlock<SourceFileInfo>)compareBlock).Fault(ex);
+            }
 
             // wait until last pipeline element is done
             await writeBlock.Completion;
@@ -94,27 +107,13 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> files, CancellationToken cancellationToken)
-        {
-            try
-            {
-                await ReadDir(config, new DirectoryInfo(config.SourceDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar), files, cancellationToken);
-                files.Complete();
-            }
-            catch (Exception ex)
-            {
-                files.Fault(ex);
-            }
-        }
-
-        private async Task ReadDir(SyncConfig config, DirectoryInfo dir, ITargetBlock<SourceFileInfo> files, CancellationToken cancellationToken)
+        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, DirectoryInfo dir, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var sourceDirLength = config.SourceDir.TrimEnd(Path.DirectorySeparatorChar).Length + 1;
 
-            if (config.Exclude?.Contains(dir.FullName.Substring(sourceDirLength)) ?? false)
+            if (config.Exclude?.Contains(Path.GetRelativePath(config.SourceDir, dir.FullName)) ?? false)
             {
-                return;
+                yield break;
             }
             foreach (var file in dir.EnumerateFiles())
             {
@@ -129,19 +128,22 @@ namespace MusicSyncConverter
 
                 if (config.SourceExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase))
                 {
-                    var path = file.FullName.Substring(sourceDirLength);
-                    await files.SendAsync(new SourceFileInfo
+                    var path = Path.GetRelativePath(config.SourceDir, file.FullName);
+                    yield return new SourceFileInfo
                     {
                         RelativePath = path,
                         AbsolutePath = file.FullName,
                         ModifiedDate = file.LastWriteTime
-                    });
+                    };
                 }
             }
 
             foreach (var subDir in dir.EnumerateDirectories())
             {
-                await ReadDir(config, subDir, files, cancellationToken);
+                foreach (var file in ReadDir(config, subDir, cancellationToken))
+                {
+                    yield return file;
+                }
             }
         }
 
