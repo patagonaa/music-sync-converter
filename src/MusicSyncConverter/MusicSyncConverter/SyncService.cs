@@ -224,20 +224,26 @@ namespace MusicSyncConverter
                 case CompareResultType.Replace:
                     Console.WriteLine($"--> Read {workItem.SourceFileInfo.AbsolutePath}");
 
-                    // i'm not sure if this is smart or dumb but it definitely improves performance in cases where the source drive is slow and the system drive is fast
-                    string tmpFilePath = TempFileHelper.GetTempFilePath();
-                    using (var tmpFile = File.Create(tmpFilePath))
-                    {
-                        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                        {
-                            // this should in theory cause Windows to try to keep the file contents in RAM instead of writing to disk
-                            // on linux/unix this should be tmpfs anyway
-                            File.SetAttributes(tmpFilePath, FileAttributes.Temporary);
-                        }
+                    bool useTempFile = UseTempAsBuffer(workItem.SourceFileInfo.AbsolutePath);
+                    string tmpFilePath = null;
 
-                        using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
+                    if (useTempFile)
+                    {
+                        // i'm not sure if this is smart or dumb but it definitely improves performance in cases where the source drive is slow and the system drive is fast
+                        tmpFilePath = TempFileHelper.GetTempFilePath();
+                        using (var tmpFile = File.Create(tmpFilePath))
                         {
-                            await inFile.CopyToAsync(tmpFile, cancellationToken);
+                            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                            {
+                                // this should in theory cause Windows to try to keep the file contents in RAM instead of writing to disk
+                                // on linux/unix this should be tmpfs anyway
+                                File.SetAttributes(tmpFilePath, FileAttributes.Temporary);
+                            }
+
+                            using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
+                            {
+                                await inFile.CopyToAsync(tmpFile, cancellationToken);
+                            }
                         }
                     }
 
@@ -253,6 +259,24 @@ namespace MusicSyncConverter
                     throw new ArgumentException("Invalid ReadActionType");
             }
             return toReturn;
+        }
+
+        private bool UseTempAsBuffer(string absolutePath)
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                var tmpDir = TempFileHelper.GetTempPath();
+                // if source drive is not temp drive, copying doesn't make sense
+                return Path.GetPathRoot(absolutePath) != Path.GetPathRoot(tmpDir);
+            }
+            else if (Environment.OSVersion.Platform == PlatformID.Unix)
+            {
+                // on unix, temp path should be tmpfs anyway so copying usually makes sense
+                return true;
+            }
+
+            // whatever
+            return true;
         }
 
         public async Task<OutputFile> Convert(ConvertWorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
