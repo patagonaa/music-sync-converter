@@ -74,9 +74,11 @@ namespace MusicSyncConverter
             try
             {
                 var r = new Random();
-                foreach (var dir in ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken).OrderBy(x => r.Next()))
+                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken)
+                    .OrderBy(x => r.Next());
+                foreach (var file in files)
                 {
-                    await compareBlock.SendAsync(dir);
+                    await compareBlock.SendAsync(file);
                 }
                 compareBlock.Complete();
             }
