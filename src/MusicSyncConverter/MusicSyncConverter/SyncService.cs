@@ -29,10 +29,12 @@ namespace MusicSyncConverter
 
         public async Task Run(SyncConfig config, CancellationToken cancellationToken)
         {
+            CleanupTempDir();
+
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = Math.Max(16, config.WorkersRead),
+                BoundedCapacity = config.WorkersRead,
                 MaxDegreeOfParallelism = config.WorkersRead,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -40,7 +42,7 @@ namespace MusicSyncConverter
 
             var workerOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = Math.Max(8, config.WorkersConvert),
+                BoundedCapacity = config.WorkersConvert,
                 MaxDegreeOfParallelism = config.WorkersConvert,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -48,7 +50,7 @@ namespace MusicSyncConverter
 
             var writeOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = Math.Max(8, config.WorkersWrite),
+                BoundedCapacity = config.WorkersWrite,
                 MaxDegreeOfParallelism = config.WorkersWrite,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
@@ -75,7 +77,7 @@ namespace MusicSyncConverter
             {
                 var r = new Random();
                 var files = ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken)
-                    .OrderBy(x => r.Next());
+                    .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
                 foreach (var file in files)
                 {
                     await compareBlock.SendAsync(file);
@@ -97,6 +99,17 @@ namespace MusicSyncConverter
             foreach (var updatedDir in updatedDirs.Distinct(targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Length))
             {
                 _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
+            }
+        }
+
+        private void CleanupTempDir()
+        {
+            var thresholdDate = DateTime.UtcNow - TimeSpan.FromDays(1);
+            foreach (var file in Directory.GetFiles(TempFileHelper.GetTempPath()))
+            {
+                var fileInfo = new FileInfo(file);
+                if (fileInfo.LastWriteTimeUtc < thresholdDate)
+                    fileInfo.Delete();
             }
         }
 
@@ -230,20 +243,9 @@ namespace MusicSyncConverter
                     if (useTempFile)
                     {
                         // i'm not sure if this is smart or dumb but it definitely improves performance in cases where the source drive is slow and the system drive is fast
-                        tmpFilePath = TempFileHelper.GetTempFilePath();
-                        using (var tmpFile = File.Create(tmpFilePath))
+                        using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
                         {
-                            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                            {
-                                // this should in theory cause Windows to try to keep the file contents in RAM instead of writing to disk
-                                // on linux/unix this should be tmpfs anyway
-                                File.SetAttributes(tmpFilePath, FileAttributes.Temporary);
-                            }
-
-                            using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
-                            {
-                                await inFile.CopyToAsync(tmpFile, cancellationToken);
-                            }
+                            tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
                         }
                     }
 
@@ -289,19 +291,6 @@ namespace MusicSyncConverter
                     case ConvertActionType.Keep:
                         handledFiles.Add(workItem.TargetFilePath);
                         return null;
-                    case ConvertActionType.Copy:
-                        {
-                            Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
-                            handledFiles.Add(workItem.TargetFilePath);
-                            toReturn = new OutputFile
-                            {
-                                Path = workItem.TargetFilePath,
-                                ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                Content = await File.ReadAllBytesAsync(workItem.SourceTempFilePath, cancellationToken)
-                            };
-                            Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
-                            break;
-                        }
                     case ConvertActionType.Transcode:
                     case ConvertActionType.Remux:
                         {
@@ -310,14 +299,14 @@ namespace MusicSyncConverter
                             var sourcePath = workItem.SourceTempFilePath ?? workItem.SourceFileInfo.AbsolutePath;
                             var outputFormat = workItem.EncoderInfo;
 
-                            var outBytes = await _converter.Convert(sourcePath, outputFormat, workItem.Tags, cancellationToken);
+                            var outPath = await _converter.Convert(sourcePath, outputFormat, workItem.Tags, cancellationToken);
 
                             handledFiles.Add(workItem.TargetFilePath);
                             toReturn = new OutputFile
                             {
                                 Path = workItem.TargetFilePath,
                                 ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                Content = outBytes
+                                TempFilePath = outPath
                             };
                             sw.Stop();
                             Console.WriteLine($"<-- {workItem.ActionType} {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.RelativePath}");
@@ -364,7 +353,14 @@ namespace MusicSyncConverter
                 Directory.CreateDirectory(directory);
 
                 File.Delete(file.Path); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
-                await File.WriteAllBytesAsync(file.Path, file.Content, cancellationToken);
+                using (var tmpFile = File.OpenRead(file.TempFilePath))
+                {
+                    using (var outputFile = File.OpenWrite(file.Path))
+                    {
+                        await tmpFile.CopyToAsync(outputFile, cancellationToken);
+                    }
+                }
+                File.Delete(file.TempFilePath);
                 File.SetLastWriteTime(file.Path, file.ModifiedDate);
                 Console.WriteLine($"<-- Write {file.Path}");
             }

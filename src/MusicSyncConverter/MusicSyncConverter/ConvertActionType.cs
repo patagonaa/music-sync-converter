@@ -3,7 +3,6 @@
     public enum ConvertActionType
     {
         Keep,
-        Copy,
         Transcode,
         Remux
     }

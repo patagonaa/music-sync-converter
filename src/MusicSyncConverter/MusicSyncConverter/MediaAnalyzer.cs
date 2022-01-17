@@ -89,29 +89,16 @@ namespace MusicSyncConverter
 
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
             {
-                if (config.DeviceConfig.CharacterLimitations == null) // todo check tag / albumart compatibility?
+                var copyAlbumArt = !string.IsNullOrEmpty(config.DeviceConfig.FallbackFormat.CoverCodec); // only copy album art if we want it
+                return new ConvertWorkItem
                 {
-                    return new ConvertWorkItem
-                    {
-                        ActionType = ConvertActionType.Copy,
-                        SourceFileInfo = workItem.SourceFileInfo,
-                        SourceTempFilePath = workItem.SourceTempFilePath,
-                        TargetFilePath = targetFilePath
-                    };
-                }
-                else
-                {
-                    var copyAlbumArt = !string.IsNullOrEmpty(config.DeviceConfig.FallbackFormat.CoverCodec); // only copy album art if we want it
-                    return new ConvertWorkItem
-                    {
-                        ActionType = ConvertActionType.Remux,
-                        SourceFileInfo = workItem.SourceFileInfo,
-                        SourceTempFilePath = workItem.SourceTempFilePath,
-                        TargetFilePath = targetFilePath,
-                        EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, copyAlbumArt),
-                        Tags = tags
-                    };
-                }
+                    ActionType = ConvertActionType.Remux,
+                    SourceFileInfo = workItem.SourceFileInfo,
+                    SourceTempFilePath = workItem.SourceTempFilePath,
+                    TargetFilePath = targetFilePath,
+                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, copyAlbumArt),
+                    Tags = tags
+                };
             }
 
             return new ConvertWorkItem
