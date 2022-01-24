@@ -19,6 +19,16 @@ namespace MusicSyncConverter
                 {
                     x.WithAudioCodec(encoderInfo.Codec);
 
+                    if (encoderInfo.Channels.HasValue)
+                    {
+                        x.WithArgument(new CustomArgument($"-ac {encoderInfo.Channels.Value}"));
+                    }
+
+                    if (encoderInfo.SampleRateHz.HasValue)
+                    {
+                        x.WithAudioSamplingRate(encoderInfo.SampleRateHz.Value);
+                    }
+
                     if (encoderInfo.Bitrate.HasValue)
                     {
                         x.WithAudioBitrate(encoderInfo.Bitrate.Value);

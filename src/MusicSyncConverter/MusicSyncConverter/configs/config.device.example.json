@@ -20,7 +20,9 @@
             {
                 "Extension": ".m4a",
                 "Codec": "aac",
-                "Profile": "LC"
+                "Profile": "LC",
+                "MaxSampleRateHz": 48000,
+                "MaxChannels": 2
             },
             {
                 "Extension": ".m4a",
@@ -47,6 +49,8 @@
             "Muxer": "ipod",
             "AdditionalFlags": "-movflags faststart",
             "Bitrate": 192,
+            "SampleRateHz": 44100,
+            "Channels": 2,
             "CoverCodec": "mjpeg",
             "MaxCoverSize": 320
         }

@@ -8,19 +8,27 @@
             {
                 "Extension": ".m4a",
                 "Codec": "aac",
-                "Profile": "LC"
+                "Profile": "LC",
+                "MaxSampleRateHz": 48000,
+                "MaxChannels": 2
             },
             {
                 "Extension": ".aac",
                 "Codec": "aac",
-                "Profile": "LC"
+                "Profile": "LC",
+                "MaxSampleRateHz": 48000,
+                "MaxChannels": 2
             },
             {
                 "Extension": ".flac",
-                "Codec": "flac"
+                "Codec": "flac",
+                "MaxSampleRateHz": 96000,
+                "MaxChannels": 2
             },
             {
-                "Extension": ".wav"
+                "Extension": ".wav",
+                "MaxSampleRateHz": 44100,
+                "MaxChannels": 2
             }
         ],
         "FallbackFormat": {

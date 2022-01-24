@@ -87,16 +87,15 @@ namespace MusicSyncConverter
 
             var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true));
 
-            if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream.CodecName, audioStream.Profile))
+            if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
-                var copyAlbumArt = !string.IsNullOrEmpty(config.DeviceConfig.FallbackFormat.CoverCodec); // only copy album art if we want it
                 return new ConvertWorkItem
                 {
                     ActionType = ConvertActionType.Remux,
                     SourceFileInfo = workItem.SourceFileInfo,
                     SourceTempFilePath = workItem.SourceTempFilePath,
                     TargetFilePath = targetFilePath,
-                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, copyAlbumArt),
+                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat.CoverCodec),
                     Tags = tags
                 };
             }
@@ -112,9 +111,8 @@ namespace MusicSyncConverter
             };
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, bool copyAlbumArt)
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, string coverCodec)
         {
-            var coverCodec = copyAlbumArt ? "copy" : null;
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
             switch (sourceExtension.ToLowerInvariant())
@@ -206,13 +204,15 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private bool IsSupported(IList<FileFormat> supportedFormats, string extension, string codec, string profile)
+        private bool IsSupported(IList<DeviceFileFormat> supportedFormats, string sourceExtension, AudioStream audioStream)
         {
-            foreach (var format in supportedFormats)
+            foreach (var supportedFormat in supportedFormats)
             {
-                if (format.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase) &&
-                    (format.Codec == null || format.Codec.Equals(codec, StringComparison.OrdinalIgnoreCase)) &&
-                    (format.Profile == null || format.Profile.Equals(profile, StringComparison.OrdinalIgnoreCase)))
+                if (supportedFormat.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase) &&
+                    (supportedFormat.Codec == null || supportedFormat.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
+                    (supportedFormat.Profile == null || supportedFormat.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
+                    (supportedFormat.MaxChannels == null || supportedFormat.MaxChannels >= audioStream.Channels) &&
+                    (supportedFormat.MaxSampleRateHz == null || supportedFormat.MaxSampleRateHz >= audioStream.SampleRateHz))
                 {
                     return true;
                 }
