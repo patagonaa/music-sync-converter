@@ -27,9 +27,11 @@ namespace MusicSyncConverter
             _fatSorter = new FatSorter();
         }
 
-        public async Task Run(SyncConfig config, CancellationToken cancellationToken)
+        public async Task Run(SyncConfig config, CancellationToken upstreamCancellationToken)
         {
-            CleanupTempDir();
+            using var cancallationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(upstreamCancellationToken);
+            var cancellationToken = cancallationTokenSource.Token;
+            CleanupTempDir(cancellationToken);
 
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
@@ -73,28 +75,24 @@ namespace MusicSyncConverter
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding files to check for changes
-            try
-            {
-                var r = new Random();
-                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken)
-                    .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
-                foreach (var file in files)
-                {
-                    await compareBlock.SendAsync(file);
-                }
-                compareBlock.Complete();
-            }
-            catch (Exception ex)
-            {
-                ((ITargetBlock<SourceFileInfo>)compareBlock).Fault(ex);
-            }
+            _ = ReadDirs(config, compareBlock, cancellationToken);
 
             // wait until last pipeline element is done
-            await writeBlock.Completion;
+            try
+            {
+                await writeBlock.Completion;
+            }
+            catch (Exception)
+            {
+                // cancel everything as faults only get propagated to the blocks after the fault
+                // and we need all blocks to stop so we can exit the application
+                cancallationTokenSource.Cancel();
+                throw;
+            }
 
             // delete additional files and empty directories
             DeleteAdditionalFiles(config, handledFiles, targetCaseSensitive, cancellationToken);
-            DeleteEmptySubdirectories(config.TargetDir);
+            DeleteEmptySubdirectories(config.TargetDir, cancellationToken);
 
             foreach (var updatedDir in updatedDirs.Distinct(targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Length))
             {
@@ -102,11 +100,32 @@ namespace MusicSyncConverter
             }
         }
 
-        private void CleanupTempDir()
+        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> targetBlock, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var r = new Random();
+                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken)
+                    .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
+                foreach (var file in files)
+                {
+                    await targetBlock.SendAsync(file, cancellationToken);
+                }
+                targetBlock.Complete();
+            }
+            catch (Exception ex)
+            {
+                targetBlock.Fault(ex);
+                throw;
+            }
+        }
+
+        private void CleanupTempDir(CancellationToken cancellationToken)
         {
             var thresholdDate = DateTime.UtcNow - TimeSpan.FromDays(1);
             foreach (var file in Directory.GetFiles(TempFileHelper.GetTempPath()))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var fileInfo = new FileInfo(file);
                 if (fileInfo.LastWriteTimeUtc < thresholdDate)
                     fileInfo.Delete();
@@ -396,11 +415,12 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteEmptySubdirectories(string parentDirectory)
+        private void DeleteEmptySubdirectories(string parentDirectory, CancellationToken cancellationToken)
         {
             foreach (string directory in Directory.GetDirectories(parentDirectory))
             {
-                DeleteEmptySubdirectories(directory);
+                cancellationToken.ThrowIfCancellationRequested();
+                DeleteEmptySubdirectories(directory, cancellationToken);
                 if (!Directory.EnumerateFileSystemEntries(directory).Any())
                 {
                     Console.WriteLine($"Delete {directory}");
