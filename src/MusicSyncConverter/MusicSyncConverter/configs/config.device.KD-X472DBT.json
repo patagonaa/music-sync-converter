@@ -1,24 +1,38 @@
 {
     "DeviceConfig": {
-        "SupportedFormats": [
+        "SupportedFormats": [ // https://www.jvc.net/cs/car/audiofile/index.php?lang=english&model=KD-X472DBT
             {
                 "Extension": ".mp3",
                 "Codec": "mp3"
             },
-            {
-                "Extension": ".m4a",
-                "Codec": "aac",
-                "Profile": "LC",
-                "MaxSampleRateHz": 48000,
-                "MaxChannels": 2
-            },
-            {
-                "Extension": ".aac",
-                "Codec": "aac",
-                "Profile": "LC",
-                "MaxSampleRateHz": 48000,
-                "MaxChannels": 2
-            },
+            //{ // documentation says this should work, but neither FFMPEG AAC, libfdkaac or iTunes AAC work - songs are skipped after ~5 minutes (at 192kbit/s)
+            //    "Extension": ".m4a",
+            //    "Codec": "aac",
+            //    "Profile": "LC",
+            //    "MaxSampleRateHz": 44100,
+            //    "MaxChannels": 2
+            //},
+            //{ // documentation says this should work, but neither FFMPEG AAC, libfdkaac or iTunes AAC work - songs are skipped after ~5 minutes (at 192kbit/s)
+            //    "Extension": ".aac",
+            //    "Codec": "aac",
+            //    "Profile": "LC",
+            //    "MaxSampleRateHz": 44100,
+            //    "MaxChannels": 2
+            //},
+            //{ // documentation says this isn't supported but it works (but only as well as AAC-LC does)
+            //    "Extension": ".m4a",
+            //    "Codec": "aac",
+            //    "Profile": "HE-AAC",
+            //    "MaxSampleRateHz": 44100,
+            //    "MaxChannels": 2
+            //},
+            //{ // documentation says this isn't supported but it works (but only as well as AAC-LC does)
+            //    "Extension": ".m4a",
+            //    "Codec": "aac",
+            //    "Profile": "HE-AACv2", // documentation says this isn't supported but it works
+            //    "MaxSampleRateHz": 44100,
+            //    "MaxChannels": 2
+            //},
             {
                 "Extension": ".flac",
                 "Codec": "flac",
