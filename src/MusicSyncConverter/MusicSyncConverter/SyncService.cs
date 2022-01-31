@@ -387,6 +387,10 @@ namespace MusicSyncConverter
             {
                 throw;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
