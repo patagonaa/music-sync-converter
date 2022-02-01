@@ -370,11 +370,11 @@ namespace MusicSyncConverter
 
                 var dirInfo = new DirectoryInfo(directory);
                 updatedDirectories.Add(dirInfo.FullName);
-                do
+                while (!dirInfo.Exists)
                 {
                     dirInfo = dirInfo.Parent;
                     updatedDirectories.Add(dirInfo.FullName);
-                } while (!dirInfo.Exists);
+                }
 
                 Directory.CreateDirectory(directory);
 
