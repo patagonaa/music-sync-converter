@@ -9,7 +9,7 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer
     {
-        public string SanitizeText(CharacterLimitations config, string text, bool isPath)
+        public string SanitizeText(CharacterLimitations config, string text, bool isPath, ICollection<string> unsupportedStrings = null)
         {
             if (config == null)
                 return text;
@@ -26,18 +26,18 @@ namespace MusicSyncConverter
                     }
                     else
                     {
-                        toReturn.Add(Sanitize(config, part, true));
+                        toReturn.Add(Sanitize(config, part, true, unsupportedStrings));
                     }
                 }
                 return string.Join(Path.DirectorySeparatorChar, toReturn);
             }
             else
             {
-                return Sanitize(config, text, false);
+                return Sanitize(config, text, false, unsupportedStrings);
             }
         }
 
-        private static string Sanitize(CharacterLimitations config, string text, bool isForPath)
+        private static string Sanitize(CharacterLimitations config, string text, bool isForPath, ICollection<string> unsupportedStrings)
         {
             var toReturn = new StringBuilder();
 
@@ -91,6 +91,7 @@ namespace MusicSyncConverter
 
             if (unsupportedChars)
             {
+                unsupportedStrings?.Add(text);
                 //Console.WriteLine($"Warning: unsupported chars in {text}");
             }
 

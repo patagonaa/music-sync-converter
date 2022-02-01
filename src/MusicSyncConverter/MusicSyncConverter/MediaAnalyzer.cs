@@ -31,7 +31,7 @@ namespace MusicSyncConverter
             _sanitizer = sanitizer;
         }
 
-        public async Task<ConvertWorkItem> Analyze(SyncConfig config, AnalyzeWorkItem workItem)
+        public async Task<ConvertWorkItem> Analyze(SyncConfig config, AnalyzeWorkItem workItem, ICollection<string> unsupportedStrings)
         {
             ConvertWorkItem toReturn;
             switch (workItem.ActionType)
@@ -46,7 +46,7 @@ namespace MusicSyncConverter
                     break;
                 case AnalyzeActionType.CopyOrConvert:
                     Console.WriteLine($"--> Analyze {workItem.SourceFileInfo.AbsolutePath}");
-                    toReturn = await GetWorkItemCopyOrConvert(config, workItem);
+                    toReturn = await GetWorkItemCopyOrConvert(config, workItem, unsupportedStrings);
                     Console.WriteLine($"<-- Analyze {workItem.SourceFileInfo.AbsolutePath}");
                     break;
                 default:
@@ -55,7 +55,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private async Task<ConvertWorkItem> GetWorkItemCopyOrConvert(SyncConfig config, AnalyzeWorkItem workItem)
+        private async Task<ConvertWorkItem> GetWorkItemCopyOrConvert(SyncConfig config, AnalyzeWorkItem workItem, ICollection<string> unsupportedStrings)
         {
             var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 
@@ -75,7 +75,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var tags = MapTags(mediaAnalysis, config.DeviceConfig.CharacterLimitations);
+            var tags = MapTags(mediaAnalysis, config.DeviceConfig.CharacterLimitations, unsupportedStrings);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
@@ -85,7 +85,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true));
+            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, unsupportedStrings));
 
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
@@ -181,7 +181,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, CharacterLimitations characterLimitations)
+        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, CharacterLimitations characterLimitations, ICollection<string> unsupportedStrings)
         {
             var toReturn = new Dictionary<string, string>();
             foreach (var tag in mediaAnalysis.Format.Tags ?? new Dictionary<string, string>())
@@ -190,7 +190,7 @@ namespace MusicSyncConverter
                 {
                     continue;
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false);
+                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, unsupportedStrings);
             }
             foreach (var tag in mediaAnalysis.PrimaryAudioStream.Tags ?? new Dictionary<string, string>())
             {
@@ -198,7 +198,7 @@ namespace MusicSyncConverter
                 {
                     continue;
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false);
+                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, unsupportedStrings);
             }
 
             return toReturn;

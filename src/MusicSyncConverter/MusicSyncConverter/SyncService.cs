@@ -1,4 +1,5 @@
-﻿using MusicSyncConverter.Config;
+﻿using ConcurrentCollections;
+using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
@@ -62,10 +63,11 @@ namespace MusicSyncConverter
 
             var handledFiles = new ConcurrentBag<string>();
             var updatedDirs = new ConcurrentBag<string>();
+            var unsupportedStrings = new ConcurrentHashSet<string>();
 
             var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new ReadWorkItem[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
             var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
-            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new ConvertWorkItem[] { await _analyzer.Analyze(config, x) }.Where(y => y != null), workerOptions);
+            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new ConvertWorkItem[] { await _analyzer.Analyze(config, x, unsupportedStrings) }.Where(y => y != null), workerOptions);
             var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new OutputFile[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
             var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, updatedDirs, cancellationToken), writeOptions);
 
@@ -97,6 +99,11 @@ namespace MusicSyncConverter
             foreach (var updatedDir in updatedDirs.Distinct(targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Length))
             {
                 _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
+            }
+
+            foreach (var unsupportedString in unsupportedStrings)
+            {
+                Console.WriteLine($"Unsupported chars in: {unsupportedString}");
             }
         }
 
