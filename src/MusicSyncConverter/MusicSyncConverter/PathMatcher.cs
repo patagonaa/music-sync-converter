@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace MusicSyncConverter
 {
+    // this might be replacable by Microsoft.Extensions.FileSystemGlobbing but I didn't know it existed at the time
+    // of this implementation and while this implementation is ugly, it works for my cases
     public class PathMatcher
     {
         private readonly string _pathSeperatorRegex;
