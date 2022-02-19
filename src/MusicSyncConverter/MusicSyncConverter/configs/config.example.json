@@ -11,7 +11,8 @@
     "TargetDir": "E:\\Audio",
     "Exclude": [
         "Webradio",
-        "Musik\\Albums\\Nickelback"
+        "Musik\\Artists\\Nickelback",
+        "Musik\\Artists\\**\\Instrumentals"
     ],
     "WorkersRead": 8,
     "WorkersConvert": 8,

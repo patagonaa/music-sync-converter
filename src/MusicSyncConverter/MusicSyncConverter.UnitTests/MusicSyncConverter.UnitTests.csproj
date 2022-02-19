@@ -1,19 +1,23 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
+    </PropertyGroup>
 
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
+    <PropertyGroup Condition="'$(IsWindows)'=='true'">
+        <DefineConstants>Windows</DefineConstants>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
-    <PackageReference Include="NUnit" Version="3.13.2" />
-    <PackageReference Include="NUnit3TestAdapter" Version="4.2.0" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
+        <PackageReference Include="NUnit" Version="3.13.2" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.2.0" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\MusicSyncConverter\MusicSyncConverter.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\MusicSyncConverter\MusicSyncConverter.csproj" />
+    </ItemGroup>
 
 </Project>

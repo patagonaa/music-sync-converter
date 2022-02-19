@@ -19,6 +19,7 @@ namespace MusicSyncConverter
         private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
         private readonly FatSorter _fatSorter;
+        private readonly PathMatcher _pathMatcher;
 
         public SyncService()
         {
@@ -26,6 +27,7 @@ namespace MusicSyncConverter
             _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
             _fatSorter = new FatSorter();
+            _pathMatcher = new PathMatcher();
         }
 
         public async Task Run(SyncConfig config, CancellationToken upstreamCancellationToken)
@@ -77,7 +79,7 @@ namespace MusicSyncConverter
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             // start pipeline by adding files to check for changes
-            _ = ReadDirs(config, compareBlock, cancellationToken);
+            _ = ReadDirs(config, compareBlock, targetCaseSensitive, cancellationToken);
 
             // wait until last pipeline element is done
             try
@@ -92,11 +94,13 @@ namespace MusicSyncConverter
                 throw;
             }
 
+            var pathComparer = new PathComparer(targetCaseSensitive);
+
             // delete additional files and empty directories
-            DeleteAdditionalFiles(config, handledFiles, targetCaseSensitive, cancellationToken);
+            DeleteAdditionalFiles(config, handledFiles, pathComparer, cancellationToken);
             DeleteEmptySubdirectories(config.TargetDir, cancellationToken);
 
-            foreach (var updatedDir in updatedDirs.Distinct(targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Length))
+            foreach (var updatedDir in updatedDirs.Distinct(pathComparer).OrderByDescending(x => x.Length))
             {
                 _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
             }
@@ -107,12 +111,12 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> targetBlock, CancellationToken cancellationToken)
+        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> targetBlock, bool targetCaseSensitive, CancellationToken cancellationToken)
         {
             try
             {
                 var r = new Random();
-                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), cancellationToken)
+                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), targetCaseSensitive, cancellationToken)
                     .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
                 foreach (var file in files)
                 {
@@ -156,11 +160,12 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, DirectoryInfo dir, CancellationToken cancellationToken)
+        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, DirectoryInfo dir, bool caseSensitive, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (config.Exclude?.Contains(Path.GetRelativePath(config.SourceDir, dir.FullName)) ?? false)
+            var relativeDirPath = Path.GetRelativePath(config.SourceDir, dir.FullName);
+            if (config.Exclude?.Any(glob => _pathMatcher.Matches(glob, relativeDirPath, caseSensitive)) ?? false)
             {
                 yield break;
             }
@@ -177,10 +182,10 @@ namespace MusicSyncConverter
 
                 if (config.SourceExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase))
                 {
-                    var path = Path.GetRelativePath(config.SourceDir, file.FullName);
+                    var relativeFilePath = Path.GetRelativePath(config.SourceDir, file.FullName);
                     yield return new SourceFileInfo
                     {
-                        RelativePath = path,
+                        RelativePath = relativeFilePath,
                         AbsolutePath = file.FullName,
                         ModifiedDate = file.LastWriteTime
                     };
@@ -189,7 +194,7 @@ namespace MusicSyncConverter
 
             foreach (var subDir in dir.EnumerateDirectories())
             {
-                foreach (var file in ReadDir(config, subDir, cancellationToken))
+                foreach (var file in ReadDir(config, subDir, caseSensitive, cancellationToken))
                 {
                     yield return file;
                 }
@@ -405,12 +410,13 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles, bool targetCaseSensitive, CancellationToken cancellationToken)
+        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
         {
             foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!handledFiles.Contains(targetFileFull, targetCaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase))
+                
+                if (!handledFiles.Contains(targetFileFull, pathComparer))
                 {
                     Console.WriteLine($"Delete {targetFileFull}");
                     File.Delete(targetFileFull);

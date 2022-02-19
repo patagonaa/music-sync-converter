@@ -11,7 +11,7 @@ Works on Windows and Linux, macOS is untested.
 - Convert all unsupported files (fall back to AAC-LC 192kbit/s)
 - Replace unsupported characters (in directory and file names, and tag values)
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
-- Exclude `Z:\Audio\Webradio` and `Z:\Audio\Music\Albums\Nickelback`
+- Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\*\Instrumentals` (only `*` and `**` are supported)
 - Change every first character of file/dir names to uppercase so things that sort case-sensitive work properly
 - Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 
@@ -96,7 +96,8 @@ Works on Windows and Linux, macOS is untested.
     "TargetDir": "E:\\Audio\\",
     "Exclude": [
         "Webradio",
-        "Music\\Albums\\Nickelback"
+        "Music\\Artists\\Nickelback",
+        "Music\\Artists\\*\\Instrumentals"
     ],
     "WorkersRead": 8, // max number of threads to use for reading files
     "WorkersConvert": 8, // max number of threads to use for converting files
