@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MusicSyncConverter
@@ -30,17 +31,23 @@ namespace MusicSyncConverter
                 throw new ArgumentException("only '*' and '**' wildcards are allowed");
             if (glob.Contains("::"))
                 throw new ArgumentException("'::' not allowed in glob");
-            glob = glob.Replace(Path.DirectorySeparatorChar.ToString(), "::pathseperator::");
-            glob = glob.Replace(Path.AltDirectorySeparatorChar.ToString(), "::pathseperator::");
-            glob = glob.Replace("**", "::wildcard::");
-            glob = glob.Replace("*", "::singlepartwildcard::");
-            var globEscaped = Regex.Escape(glob);
-            globEscaped = globEscaped.Replace("::wildcard::", ".*");
-            globEscaped = globEscaped.Replace("::singlepartwildcard::", $"{_notPathSeperatorRegex}*");
-            globEscaped = globEscaped.Replace("::pathseperator::", _pathSeperatorRegex);
+            var sb = new StringBuilder(glob);
+            sb.Replace(Path.DirectorySeparatorChar.ToString(), "::pathseperator::");
+            sb.Replace(Path.AltDirectorySeparatorChar.ToString(), "::pathseperator::");
+            sb.Replace("**", "::wildcard::");
+            sb.Replace("*", "::singlepartwildcard::");
 
-            var regexString = $"^{globEscaped}$";
-            var regex = new Regex(regexString, caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
+            var globEscaped = Regex.Escape(sb.ToString());
+            sb.Clear();
+            sb.Append('^');
+            sb.Append(globEscaped);
+            sb.Append('$');
+
+            sb.Replace("::wildcard::", ".*");
+            sb.Replace("::singlepartwildcard::", $"{_notPathSeperatorRegex}*");
+            sb.Replace("::pathseperator::", _pathSeperatorRegex);
+
+            var regex = new Regex(sb.ToString(), caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
             return regex.IsMatch(path);
         }
     }
