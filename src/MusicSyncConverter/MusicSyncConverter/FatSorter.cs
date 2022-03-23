@@ -42,18 +42,18 @@ namespace MusicSyncConverter
             Console.WriteLine($"Sorting {directory.FullName}");
 
             var tmpDirName = Path.Combine(directory.FullName, "MusicSyncConverter.FatSorter.Temp");
-            var tmpDir = Directory.CreateDirectory(tmpDirName);
+            var tmpDir = DoWithRetries(() => Directory.CreateDirectory(tmpDirName), cancellationToken);
 
             if (sortMode.HasFlag(FatSortMode.Folders))
             {
                 foreach (var subdir in entries.OfType<DirectoryInfo>())
                 {
-                    subdir.MoveTo(Path.Combine(tmpDirName, subdir.Name));
+                    DoWithRetries(() => subdir.MoveTo(Path.Combine(tmpDirName, subdir.Name)), cancellationToken);
                 }
 
                 foreach (var subdir in tmpDir.GetDirectories().OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    subdir.MoveTo(Path.Combine(directory.FullName, subdir.Name));
+                    DoWithRetries(() => subdir.MoveTo(Path.Combine(directory.FullName, subdir.Name)), cancellationToken);
                 }
             }
 
@@ -61,16 +61,51 @@ namespace MusicSyncConverter
             {
                 foreach (var file in entries.OfType<FileInfo>())
                 {
-                    file.MoveTo(Path.Combine(tmpDirName, file.Name));
+                    DoWithRetries(() => file.MoveTo(Path.Combine(tmpDirName, file.Name)), cancellationToken);
                 }
 
                 foreach (var file in tmpDir.GetFiles().OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    file.MoveTo(Path.Combine(directory.FullName, file.Name));
+                    DoWithRetries(() => file.MoveTo(Path.Combine(directory.FullName, file.Name)), cancellationToken);
                 }
             }
 
             Directory.Delete(tmpDirName, false);
+        }
+
+        private void DoWithRetries(Action action, CancellationToken token)
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    action();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+                Thread.Sleep(1000);
+            }
+        }
+
+        private T DoWithRetries<T>(Func<T> action, CancellationToken token)
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    return action();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+                Thread.Sleep(1000);
+            }
         }
     }
 }
