@@ -21,6 +21,8 @@ namespace MusicSyncConverter
         private readonly FatSorter _fatSorter;
         private readonly PathMatcher _pathMatcher;
 
+        private static readonly TimeSpan _fileTimestampDelta = TimeSpan.FromSeconds(2); // FAT32 write time has 2 seconds precision
+
         public SyncService()
         {
             _sanitizer = new TextSanitizer();
@@ -228,15 +230,7 @@ namespace MusicSyncConverter
 
                 // only one target item, so check if it is up to date
                 var targetDate = targetInfos[0].LastWriteTime;
-                if (Math.Abs((sourceFile.ModifiedDate - targetDate).TotalMinutes) > 1)
-                {
-                    return new ReadWorkItem
-                    {
-                        ActionType = CompareResultType.Replace,
-                        SourceFileInfo = sourceFile
-                    };
-                }
-                else
+                if (FileDatesEqual(sourceFile.ModifiedDate, targetDate))
                 {
                     return new ReadWorkItem
                     {
@@ -245,11 +239,33 @@ namespace MusicSyncConverter
                         ExistingTargetFile = targetInfos[0].FullName
                     };
                 }
+                else
+                {
+                    return new ReadWorkItem
+                    {
+                        ActionType = CompareResultType.Replace,
+                        SourceFileInfo = sourceFile
+                    };
+                }
             }
             catch (Exception)
             {
                 throw;
             }
+        }
+
+        private bool FileDatesEqual(DateTime dateTime, DateTime dateTime1)
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                // this is really stupid but to handle this properly would be a lot of effort
+                // https://twitter.com/patagona/status/1516123536275910658
+                return (dateTime - dateTime1).Duration() <= _fileTimestampDelta ||
+                    (dateTime - dateTime1 - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
+                    (dateTime - dateTime1 + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta;
+            }
+
+            return (dateTime - dateTime1).Duration() <= _fileTimestampDelta;
         }
 
         private async Task<AnalyzeWorkItem> Read(ReadWorkItem workItem, CancellationToken cancellationToken)
@@ -415,7 +431,7 @@ namespace MusicSyncConverter
             foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                
+
                 if (!handledFiles.Contains(targetFileFull, pathComparer))
                 {
                     Console.WriteLine($"Delete {targetFileFull}");
