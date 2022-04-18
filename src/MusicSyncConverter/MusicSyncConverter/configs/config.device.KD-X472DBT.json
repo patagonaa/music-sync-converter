@@ -103,6 +103,10 @@
                 {
                     "Char": "½",
                     "Replacement": "1/2"
+                },
+                {
+                    "Char": "†",
+                    "Replacement": "+"
                 }
             ],
             "NormalizeCase": true
