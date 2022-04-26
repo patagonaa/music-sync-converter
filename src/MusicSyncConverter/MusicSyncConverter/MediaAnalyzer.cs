@@ -45,9 +45,9 @@ namespace MusicSyncConverter
                     };
                     break;
                 case AnalyzeActionType.CopyOrConvert:
-                    Console.WriteLine($"--> Analyze {workItem.SourceFileInfo.AbsolutePath}");
+                    Console.WriteLine($"--> Analyze {workItem.SourceFileInfo.RelativePath}");
                     toReturn = await GetWorkItemCopyOrConvert(config, workItem, unsupportedStrings);
-                    Console.WriteLine($"<-- Analyze {workItem.SourceFileInfo.AbsolutePath}");
+                    Console.WriteLine($"<-- Analyze {workItem.SourceFileInfo.RelativePath}");
                     break;
                 default:
                     throw new ArgumentException("Invalid AnalyzeActionType");
@@ -67,11 +67,11 @@ namespace MusicSyncConverter
             IMediaAnalysis mediaAnalysis;
             try
             {
-                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath ?? workItem.SourceFileInfo.AbsolutePath);
+                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.AbsolutePath}: {ex}");
+                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.RelativePath}: {ex}");
                 return null;
             }
 
@@ -81,7 +81,7 @@ namespace MusicSyncConverter
 
             if (audioStream == null)
             {
-                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.AbsolutePath}");
+                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.RelativePath}");
                 return null;
             }
 

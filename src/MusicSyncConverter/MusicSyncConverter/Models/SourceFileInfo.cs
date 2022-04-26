@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Microsoft.Extensions.FileProviders;
+using System;
 
 namespace MusicSyncConverter.Models
 {
     public class SourceFileInfo
     {
-        public string AbsolutePath { get; internal set; } // C:/Stuff/Audio/Music/Test.mp3
+        public IFileProvider FileProvider { get; set; }
         public string RelativePath { get; internal set; } // Audio/Music/Test.mp3
         public DateTime ModifiedDate { get; internal set; }
     }

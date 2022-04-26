@@ -1,4 +1,5 @@
 ﻿using ConcurrentCollections;
+using Microsoft.Extensions.FileProviders;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
@@ -80,20 +81,23 @@ namespace MusicSyncConverter
             analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-            // start pipeline by adding files to check for changes
-            _ = ReadDirs(config, compareBlock, targetCaseSensitive, cancellationToken);
+            using (var fileProvider = new PhysicalFileProvider(config.SourceDir))
+            {
+                // start pipeline by adding files to check for changes
+                _ = ReadDirs(config, fileProvider, compareBlock, targetCaseSensitive, cancellationToken);
 
-            // wait until last pipeline element is done
-            try
-            {
-                await writeBlock.Completion;
-            }
-            catch (Exception)
-            {
-                // cancel everything as faults only get propagated to the blocks after the fault
-                // and we need all blocks to stop so we can exit the application
-                cancallationTokenSource.Cancel();
-                throw;
+                // wait until last pipeline element is done
+                try
+                {
+                    await writeBlock.Completion;
+                }
+                catch (Exception)
+                {
+                    // cancel everything as faults only get propagated to the blocks after the fault
+                    // and we need all blocks to stop so we can exit the application
+                    cancallationTokenSource.Cancel();
+                    throw;
+                }
             }
 
             var pathComparer = new PathComparer(targetCaseSensitive);
@@ -113,12 +117,12 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task ReadDirs(SyncConfig config, ITargetBlock<SourceFileInfo> targetBlock, bool targetCaseSensitive, CancellationToken cancellationToken)
+        private async Task ReadDirs(SyncConfig config, IFileProvider fileProvider, ITargetBlock<SourceFileInfo> targetBlock, bool targetCaseSensitive, CancellationToken cancellationToken)
         {
             try
             {
                 var r = new Random();
-                var files = ReadDir(config, new DirectoryInfo(config.SourceDir), targetCaseSensitive, cancellationToken)
+                var files = ReadDir(config, fileProvider, "", targetCaseSensitive, cancellationToken)
                     .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
                 foreach (var file in files)
                 {
@@ -162,41 +166,32 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, DirectoryInfo dir, bool caseSensitive, CancellationToken cancellationToken)
+        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, IFileProvider fileProvider, string dir, bool caseSensitive, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var relativeDirPath = Path.GetRelativePath(config.SourceDir, dir.FullName);
-            if (config.Exclude?.Any(glob => _pathMatcher.Matches(glob, relativeDirPath, caseSensitive)) ?? false)
+            if (config.Exclude?.Any(glob => _pathMatcher.Matches(glob, dir, caseSensitive)) ?? false)
             {
                 yield break;
             }
-            foreach (var file in dir.EnumerateFiles())
+            var directoryContents = fileProvider.GetDirectoryContents(dir).ToList();
+            foreach (var file in directoryContents.Where(x => !x.IsDirectory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                // Skip files not locally on disk (if source is OneDrive / NextCloud and virtual files are used)
-                if (file.Attributes.HasFlag((FileAttributes)0x400000) || // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
-                    file.Attributes.HasFlag((FileAttributes)0x40000) // FILE_ATTRIBUTE_RECALL_ON_OPEN
-                    )
+                if (config.SourceExtensions.Contains(Path.GetExtension(file.Name), StringComparer.OrdinalIgnoreCase))
                 {
-                    continue;
-                }
-
-                if (config.SourceExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase))
-                {
-                    var relativeFilePath = Path.GetRelativePath(config.SourceDir, file.FullName);
                     yield return new SourceFileInfo
                     {
-                        RelativePath = relativeFilePath,
-                        AbsolutePath = file.FullName,
-                        ModifiedDate = file.LastWriteTime
+                        FileProvider = fileProvider,
+                        RelativePath = Path.Join(dir, file.Name),
+                        ModifiedDate = file.LastModified.LocalDateTime
                     };
                 }
             }
 
-            foreach (var subDir in dir.EnumerateDirectories())
+            foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
             {
-                foreach (var file in ReadDir(config, subDir, caseSensitive, cancellationToken))
+                foreach (var file in ReadDir(config, fileProvider, Path.Join(dir, subDir.Name), caseSensitive, cancellationToken))
                 {
                     yield return file;
                 }
@@ -282,18 +277,12 @@ namespace MusicSyncConverter
                     };
                     break;
                 case CompareResultType.Replace:
-                    Console.WriteLine($"--> Read {workItem.SourceFileInfo.AbsolutePath}");
+                    Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
 
-                    bool useTempFile = UseTempAsBuffer(workItem.SourceFileInfo.AbsolutePath);
-                    string tmpFilePath = null;
-
-                    if (useTempFile)
+                    string tmpFilePath;
+                    using (var inFile = workItem.SourceFileInfo.FileProvider.GetFileInfo(workItem.SourceFileInfo.RelativePath).CreateReadStream())
                     {
-                        // i'm not sure if this is smart or dumb but it definitely improves performance in cases where the source drive is slow and the system drive is fast
-                        using (var inFile = File.OpenRead(workItem.SourceFileInfo.AbsolutePath))
-                        {
-                            tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
-                        }
+                        tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
                     }
 
                     toReturn = new AnalyzeWorkItem
@@ -302,30 +291,12 @@ namespace MusicSyncConverter
                         SourceFileInfo = workItem.SourceFileInfo,
                         SourceTempFilePath = tmpFilePath
                     };
-                    Console.WriteLine($"<-- Read {workItem.SourceFileInfo.AbsolutePath}");
+                    Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                     break;
                 default:
                     throw new ArgumentException("Invalid ReadActionType");
             }
             return toReturn;
-        }
-
-        private bool UseTempAsBuffer(string absolutePath)
-        {
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-            {
-                var tmpDir = TempFileHelper.GetTempPath();
-                // if source drive is not temp drive, copying doesn't make sense
-                return Path.GetPathRoot(absolutePath) != Path.GetPathRoot(tmpDir);
-            }
-            else if (Environment.OSVersion.Platform == PlatformID.Unix)
-            {
-                // on unix, temp path should be tmpfs anyway so copying usually makes sense
-                return true;
-            }
-
-            // whatever
-            return true;
         }
 
         public async Task<OutputFile> Convert(ConvertWorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
@@ -343,7 +314,7 @@ namespace MusicSyncConverter
                         {
                             var sw = Stopwatch.StartNew();
                             Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
-                            var sourcePath = workItem.SourceTempFilePath ?? workItem.SourceFileInfo.AbsolutePath;
+                            var sourcePath = workItem.SourceTempFilePath;
                             var outputFormat = workItem.EncoderInfo;
 
                             var outPath = await _converter.Convert(sourcePath, outputFormat, workItem.Tags, cancellationToken);
