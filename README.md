@@ -83,7 +83,7 @@ Works on Windows and Linux, macOS is untested.
         },
         "FatSortMode": "Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders"
     },
-    "SourceDir": "Z:\\Audio\\",
+    "SourceDir": "file://Z:\\Audio\\",
     "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
         ".mp3",
         ".ogg",
@@ -106,6 +106,8 @@ Works on Windows and Linux, macOS is untested.
 ```
 
 You can also split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
+
+Also, you can use either the file system (`file://C:\Music` or `file://C:/Music` or `file:///home/user/Music`) or a WebDAV server (`https://user:password@nextcloud.example.com/remote.php/dav/files/user/Music`) as a source.
 
 "as reported by ffprobe" =>
 ```

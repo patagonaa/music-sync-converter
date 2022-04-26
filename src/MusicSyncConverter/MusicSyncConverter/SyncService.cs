@@ -1,5 +1,7 @@
 ﻿using ConcurrentCollections;
+using FileProviders.WebDav;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
@@ -16,6 +18,7 @@ namespace MusicSyncConverter
 {
     class SyncService
     {
+        private readonly FileProviderFactory _fileProviderFactory;
         private readonly TextSanitizer _sanitizer;
         private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
@@ -26,6 +29,7 @@ namespace MusicSyncConverter
 
         public SyncService()
         {
+            _fileProviderFactory = new FileProviderFactory();
             _sanitizer = new TextSanitizer();
             _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
@@ -81,7 +85,8 @@ namespace MusicSyncConverter
             analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
             convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-            using (var fileProvider = new PhysicalFileProvider(config.SourceDir))
+            var fileProvider = _fileProviderFactory.Get(config.SourceDir);
+            using (fileProvider as IDisposable)
             {
                 // start pipeline by adding files to check for changes
                 _ = ReadDirs(config, fileProvider, compareBlock, targetCaseSensitive, cancellationToken);
