@@ -2,6 +2,7 @@
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -31,7 +32,7 @@ namespace MusicSyncConverter
             _sanitizer = sanitizer;
         }
 
-        public async Task<ConvertWorkItem> Analyze(SyncConfig config, AnalyzeWorkItem workItem, ICollection<string> unsupportedStrings)
+        public async Task<ConvertWorkItem> Analyze(SyncConfig config, AnalyzeWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages)
         {
             ConvertWorkItem toReturn;
             switch (workItem.ActionType)
@@ -46,7 +47,7 @@ namespace MusicSyncConverter
                     break;
                 case AnalyzeActionType.CopyOrConvert:
                     Console.WriteLine($"--> Analyze {workItem.SourceFileInfo.RelativePath}");
-                    toReturn = await GetWorkItemCopyOrConvert(config, workItem, unsupportedStrings);
+                    toReturn = await GetWorkItemCopyOrConvert(config, workItem, infoLogMessages);
                     Console.WriteLine($"<-- Analyze {workItem.SourceFileInfo.RelativePath}");
                     break;
                 default:
@@ -55,7 +56,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private async Task<ConvertWorkItem> GetWorkItemCopyOrConvert(SyncConfig config, AnalyzeWorkItem workItem, ICollection<string> unsupportedStrings)
+        private async Task<ConvertWorkItem> GetWorkItemCopyOrConvert(SyncConfig config, AnalyzeWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages)
         {
             var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 
@@ -75,7 +76,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var tags = MapTags(mediaAnalysis, config.DeviceConfig.CharacterLimitations, unsupportedStrings);
+            var tags = MapTags(mediaAnalysis, workItem.SourceFileInfo.RelativePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
@@ -85,7 +86,9 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, unsupportedStrings));
+            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars));
+            if (hasUnsupportedChars)
+                infoLogMessages.TryAdd($"Unsupported chars in path: {workItem.SourceFileInfo.RelativePath}");
 
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
@@ -181,7 +184,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, CharacterLimitations characterLimitations, ICollection<string> unsupportedStrings)
+        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, string relativePath, CharacterLimitations characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
         {
             var toReturn = new Dictionary<string, string>();
             foreach (var tag in mediaAnalysis.Format.Tags ?? new Dictionary<string, string>())
@@ -190,7 +193,9 @@ namespace MusicSyncConverter
                 {
                     continue;
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, unsupportedStrings);
+                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
+                if(hasUnsupportedChars)
+                    infoLogMessages.TryAdd(GetUnsupportedStringsMessage(relativePath, tag.Value));
             }
             foreach (var tag in mediaAnalysis.PrimaryAudioStream.Tags ?? new Dictionary<string, string>())
             {
@@ -198,10 +203,17 @@ namespace MusicSyncConverter
                 {
                     continue;
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, unsupportedStrings);
+                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
+                if (hasUnsupportedChars)
+                    infoLogMessages.TryAdd(GetUnsupportedStringsMessage(relativePath, tag.Value));
             }
 
             return toReturn;
+        }
+
+        private string GetUnsupportedStringsMessage(string path, string str)
+        {
+            return $"Unsupported chars in {path}: {str}";
         }
 
         private bool IsSupported(IList<DeviceFileFormat> supportedFormats, string sourceExtension, AudioStream audioStream)

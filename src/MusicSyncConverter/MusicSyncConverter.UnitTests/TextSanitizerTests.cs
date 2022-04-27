@@ -23,7 +23,7 @@ namespace MusicSyncConverter.UnitTests
                 Replacements = null,
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, false);
+            var result = _sut.SanitizeText(limitations, text, false, out _);
             Assert.AreEqual(text, result);
         }
 
@@ -36,7 +36,7 @@ namespace MusicSyncConverter.UnitTests
                 Replacements = null,
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, true);
+            var result = _sut.SanitizeText(limitations, text, true, out _);
             Assert.AreEqual(expected, result);
         }
 
@@ -60,7 +60,7 @@ namespace MusicSyncConverter.UnitTests
                 },
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, false);
+            var result = _sut.SanitizeText(limitations, text, false, out _);
             Assert.AreEqual(expected, result);
         }
 
@@ -93,7 +93,7 @@ namespace MusicSyncConverter.UnitTests
                 },
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, false);
+            var result = _sut.SanitizeText(limitations, text, false, out _);
             Assert.AreEqual(expected, result);
         }
 
@@ -111,7 +111,7 @@ namespace MusicSyncConverter.UnitTests
                 Replacements = null,
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, false);
+            var result = _sut.SanitizeText(limitations, text, false, out _);
             Assert.AreEqual(expected, result);
         }
 
@@ -128,7 +128,7 @@ namespace MusicSyncConverter.UnitTests
                 Replacements = null,
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, true);
+            var result = _sut.SanitizeText(limitations, text, true, out _);
             Assert.AreEqual(expected, result);
         }
     }

@@ -1,7 +1,4 @@
-﻿using ConcurrentCollections;
-using FileProviders.WebDav;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.FileProviders;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Models;
 using System;
@@ -72,12 +69,12 @@ namespace MusicSyncConverter
 
             var handledFiles = new ConcurrentBag<string>();
             var updatedDirs = new ConcurrentBag<string>();
-            var unsupportedStrings = new ConcurrentHashSet<string>();
+            var infoLogMessages = new ConcurrentBag<string>();
 
-            var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new ReadWorkItem[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
+            var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
             var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
-            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new ConvertWorkItem[] { await _analyzer.Analyze(config, x, unsupportedStrings) }.Where(y => y != null), workerOptions);
-            var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new OutputFile[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
+            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new[] { await _analyzer.Analyze(config, x, infoLogMessages) }.Where(y => y != null), workerOptions);
+            var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
             var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, updatedDirs, cancellationToken), writeOptions);
 
             compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -116,9 +113,9 @@ namespace MusicSyncConverter
                 _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
             }
 
-            foreach (var unsupportedString in unsupportedStrings)
+            foreach (var infoLogMessage in infoLogMessages.Distinct())
             {
-                Console.WriteLine($"Unsupported chars in: {unsupportedString}");
+                Console.WriteLine(infoLogMessage);
             }
         }
 
@@ -207,7 +204,7 @@ namespace MusicSyncConverter
         {
             try
             {
-                var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true));
+                var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true, out _));
                 string targetDirPath = Path.GetDirectoryName(targetFilePath);
 
                 var directoryInfo = new DirectoryInfo(targetDirPath);

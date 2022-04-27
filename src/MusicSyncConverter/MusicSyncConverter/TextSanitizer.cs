@@ -9,13 +9,16 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer
     {
-        public string SanitizeText(CharacterLimitations config, string text, bool isPath, ICollection<string> unsupportedStrings = null)
+        public string SanitizeText(CharacterLimitations config, string text, bool isPath, out bool hasUnsupportedChars)
         {
             if (config == null)
-                return text;
+            {
+                config = new CharacterLimitations();
+            }
 
             if (isPath)
             {
+                hasUnsupportedChars = false;
                 var parts = text.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 var toReturn = new List<string>();
                 foreach (var part in parts)
@@ -26,24 +29,25 @@ namespace MusicSyncConverter
                     }
                     else
                     {
-                        toReturn.Add(Sanitize(config, part, true, unsupportedStrings));
+                        toReturn.Add(Sanitize(config, part, true, out var partHasUnsupportedChars));
+                        hasUnsupportedChars |= partHasUnsupportedChars;
                     }
                 }
                 return string.Join(Path.DirectorySeparatorChar, toReturn);
             }
             else
             {
-                return Sanitize(config, text, false, unsupportedStrings);
+                return Sanitize(config, text, false, out hasUnsupportedChars);
             }
         }
 
-        private static string Sanitize(CharacterLimitations config, string text, bool isForPath, ICollection<string> unsupportedStrings)
+        private static string Sanitize(CharacterLimitations config, string text, bool isForPath, out bool hasUnsupportedChars)
         {
             var toReturn = new StringBuilder();
 
             var pathUnsupportedChars = Path.GetInvalidFileNameChars();
 
-            var unsupportedChars = false;
+            hasUnsupportedChars = false;
 
             var first = true;
 
@@ -72,13 +76,13 @@ namespace MusicSyncConverter
                     // if this is a path, replace chars that are invalid for path names
                     if (isForPath && pathUnsupportedChars.Contains(outChar))
                     {
-                        unsupportedChars = true;
+                        hasUnsupportedChars = true;
                         toReturn.Append('_');
                     }
                     else if (config.SupportedChars != null && !config.SupportedChars.Contains(outChar))
                     {
                         // we just accept our faith and insert the character anyways
-                        unsupportedChars = true;
+                        hasUnsupportedChars = true;
                         toReturn.Append(outChar);
                     }
                     else
@@ -87,12 +91,6 @@ namespace MusicSyncConverter
                         toReturn.Append(outChar);
                     }
                 }
-            }
-
-            if (unsupportedChars)
-            {
-                unsupportedStrings?.Add(text);
-                //Console.WriteLine($"Warning: unsupported chars in {text}");
             }
 
             return toReturn.ToString();
