@@ -10,5 +10,6 @@ namespace MusicSyncConverter.Models
         public string TargetFilePath { get; set; }
         public EncoderInfo EncoderInfo { get; set; }
         public Dictionary<string, string> Tags { get; set; }
+        public string AlbumArtPath { get; set; }
     }
 }

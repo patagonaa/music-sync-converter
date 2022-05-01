@@ -174,13 +174,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
 
         public IFileInfo GetFileInfo(string subPath)
         {
-            lock (_syncLock)
-            {
-                var content = _device.Content();
-                var properties = content.Properties();
-                var obj = GetObjectId(subPath);
-            }
-            return null;
+            throw new NotImplementedException();
         }
 
         public IDirectoryContents GetDirectoryContents(string subPath)

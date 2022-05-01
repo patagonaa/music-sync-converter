@@ -99,7 +99,8 @@ namespace MusicSyncConverter
                     SourceTempFilePath = workItem.SourceTempFilePath,
                     TargetFilePath = targetFilePath,
                     EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat.CoverCodec),
-                    Tags = tags
+                    Tags = tags,
+                    AlbumArtPath = workItem.AlbumArtPath
                 };
             }
 
@@ -110,7 +111,8 @@ namespace MusicSyncConverter
                 SourceTempFilePath = workItem.SourceTempFilePath,
                 TargetFilePath = Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension),
                 EncoderInfo = config.DeviceConfig.FallbackFormat,
-                Tags = tags
+                Tags = tags,
+                AlbumArtPath = workItem.AlbumArtPath
             };
         }
 

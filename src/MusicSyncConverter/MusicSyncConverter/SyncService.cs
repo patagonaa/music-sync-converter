@@ -134,7 +134,7 @@ namespace MusicSyncConverter
             {
                 var r = new Random();
                 var files = ReadDir(config, fileProvider, "", targetCaseSensitive, cancellationToken);
-                    //.OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
+                //.OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
                 foreach (var file in files)
                 {
                     await targetBlock.SendAsync(file, cancellationToken);
@@ -275,17 +275,42 @@ namespace MusicSyncConverter
                 case CompareResultType.Replace:
                     Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
 
+                    var fileProvider = workItem.SourceFileInfo.FileProvider;
+
                     string tmpFilePath;
-                    using (var inFile = workItem.SourceFileInfo.FileProvider.GetFileInfo(workItem.SourceFileInfo.RelativePath).CreateReadStream())
+                    using (var inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.RelativePath).CreateReadStream())
                     {
                         tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
+                    }
+
+                    var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
+                    string albumCoverPath = null;
+                    foreach (var coverVariant in coverVariants)
+                    {
+                        var coverFileInfo = fileProvider.GetFileInfo(Path.Join(Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath), coverVariant));
+                        if (coverFileInfo.Exists)
+                        {
+                            if (coverFileInfo.PhysicalPath != null)
+                            {
+                                albumCoverPath = coverFileInfo.PhysicalPath;
+                            }
+                            else
+                            {
+                                using (var coverStream = coverFileInfo.CreateReadStream())
+                                {
+                                    albumCoverPath = await TempFileHelper.CopyToTempFile(coverStream, cancellationToken);
+                                }
+                            }
+                            break;
+                        }
                     }
 
                     toReturn = new AnalyzeWorkItem
                     {
                         ActionType = AnalyzeActionType.CopyOrConvert,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        SourceTempFilePath = tmpFilePath
+                        SourceTempFilePath = tmpFilePath,
+                        AlbumArtPath = albumCoverPath
                     };
                     Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                     break;
@@ -313,7 +338,7 @@ namespace MusicSyncConverter
                             var sourcePath = workItem.SourceTempFilePath;
                             var outputFormat = workItem.EncoderInfo;
 
-                            var outPath = await _converter.Convert(sourcePath, outputFormat, workItem.Tags, cancellationToken);
+                            var outPath = await _converter.Convert(sourcePath, workItem.AlbumArtPath, outputFormat, workItem.Tags, cancellationToken);
 
                             handledFiles.Add(workItem.TargetFilePath);
                             toReturn = new OutputFile
