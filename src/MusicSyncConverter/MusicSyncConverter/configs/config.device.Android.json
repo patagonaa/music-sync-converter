@@ -1,0 +1,51 @@
+{
+    "DeviceConfig": {
+        "SupportedFormats": [
+            {
+                "Extension": ".mp3",
+                "Codec": "mp3"
+            },
+            {
+                "Extension": ".flac",
+                "Codec": "flac"
+            },
+            {
+                "Extension": ".m4a",
+                "Codec": "aac",
+                "Profile": "LC",
+                "MaxSampleRateHz": 48000
+            },
+            {
+                "Extension": ".m4a",
+                "Codec": "aac",
+                "Profile": "HE-AAC"
+            },
+            {
+                "Extension": ".m4a",
+                "Codec": "aac",
+                "Profile": "HE-AACv2"
+            },
+            {
+                "Extension": ".ogg",
+                "Codec": "vorbis"
+            },
+            {
+                "Extension": ".ogg",
+                "Codec": "opus"
+            },
+            {
+                "Extension": ".wav",
+                "MaxSampleRateHz": 44100,
+                "MaxChannels": 2
+            }
+        ],
+        "FallbackFormat": {
+            "Extension": ".ogg",
+            "Codec": "libopus",
+            "Muxer": "ogg",
+            "Bitrate": 128,
+            "CoverCodec": "mjpeg",
+            "MaxCoverSize": null
+        }
+    }
+}

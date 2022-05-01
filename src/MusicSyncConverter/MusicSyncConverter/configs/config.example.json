@@ -1,5 +1,5 @@
 {
-    "SourceDir": "Z:\\Audio\\",
+    "SourceDir": "file://Z:\\Audio\\",
     "SourceExtensions": [
         ".mp3",
         ".ogg",
@@ -8,7 +8,7 @@
         ".opus",
         ".wav"
     ],
-    "TargetDir": "E:\\Audio",
+    "TargetDir": "file://E:\\Audio",
     "Exclude": [
         "Webradio",
         "Musik\\Artists\\Nickelback",

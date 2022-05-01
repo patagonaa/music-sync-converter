@@ -86,7 +86,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars));
+            var targetFilePath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars);
             if (hasUnsupportedChars)
                 infoLogMessages.TryAdd($"Unsupported chars in path: {workItem.SourceFileInfo.RelativePath}");
 

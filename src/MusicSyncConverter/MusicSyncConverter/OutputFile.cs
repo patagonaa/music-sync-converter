@@ -4,8 +4,8 @@ namespace MusicSyncConverter
 {
     class OutputFile
     {
-        public string Path { get; set; } // E:/Audio/Music/Test.mp3
-        public DateTime ModifiedDate { get; set; }
+        public string Path { get; set; } // Music/Test.mp3
+        public DateTimeOffset ModifiedDate { get; set; }
         public string TempFilePath { get; set; }
     }
 }

@@ -93,7 +93,7 @@ Works on Windows and Linux, macOS is untested.
         ".wma",
         ".wav"
     ],
-    "TargetDir": "E:\\Audio\\",
+    "TargetDir": "file://E:\\Audio\\",
     "Exclude": [
         "Webradio",
         "Music\\Artists\\Nickelback",
