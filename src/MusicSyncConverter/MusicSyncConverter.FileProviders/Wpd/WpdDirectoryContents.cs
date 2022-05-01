@@ -8,34 +8,28 @@ namespace MusicSyncConverter.FileProviders.Wpd
     internal class WpdDirectoryContents : IDirectoryContents
     {
         private readonly string _objectId;
-        private readonly object _synclock;
         private readonly PortableDeviceApi.IPortableDeviceContent _content;
         private readonly PortableDeviceApi.IPortableDeviceProperties _contentProperties;
+        private readonly List<IFileInfo> _fileInfos;
 
         public WpdDirectoryContents(string objectId, object synclock, PortableDeviceApi.IPortableDeviceContent content, PortableDeviceApi.IPortableDeviceProperties contentProperties)
         {
             _objectId = objectId;
-            _synclock = synclock;
             _content = content;
             _contentProperties = contentProperties;
+            _fileInfos = new List<IFileInfo>();
+            var children = _content.EnumObjects(0, _objectId);
+            foreach (var childId in children.Enumerate())
+            {
+                _fileInfos.Add(new WpdFileInfo(childId, synclock, _content, _contentProperties));
+            }
         }
 
         public bool Exists => true;
 
         public IEnumerator<IFileInfo> GetEnumerator()
         {
-            // we _could_ yield return here instead, but then we would hold the lock as long as we're enumerating, which would suck.
-            // for example, you wouldn't be able to do file operations in a foreach loop over the directory.
-            var fileInfos = new List<IFileInfo>(); 
-            lock (_synclock)
-            {
-                var children = _content.EnumObjects(0, _objectId);
-                foreach (var childId in children.Enumerate())
-                {
-                    fileInfos.Add(new WpdFileInfo(childId, _content, _contentProperties));
-                }
-            }
-            return fileInfos.GetEnumerator();
+            return _fileInfos.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator()

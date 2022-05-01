@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Primitives;
 using MusicSyncConverter.FileProviders.Abstractions;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -22,6 +23,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly IPortableDeviceContent _content;
         private readonly IPortableDeviceProperties _contentProperties;
         private readonly string _basePath;
+        private readonly Dictionary<string, IDirectoryContents> _directoryContentsCache = new Dictionary<string, IDirectoryContents>();
 
         public WpdSyncTarget(string friendlyName, string basePath)
         {
@@ -93,7 +95,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 if (existingFileObjId != null)
                 {
                     var objsToDelete = new IPortableDevicePropVariantCollection();
-                    objsToDelete.Add(new Ole32.PROPVARIANT(existingFileObjId));
+                    objsToDelete.Add(new PROPVARIANT(existingFileObjId));
                     _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
                 }
 
@@ -128,6 +130,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 }
                 sw.Stop();
                 Debug.WriteLine("Write " + sw.ElapsedMilliseconds + "(" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
+
+                _directoryContentsCache.Clear();
             }
             return Task.CompletedTask;
         }
@@ -179,14 +183,16 @@ namespace MusicSyncConverter.FileProviders.Wpd
 
         public IDirectoryContents GetDirectoryContents(string subPath)
         {
-            string? obj;
             lock (_syncLock)
             {
-                obj = GetObjectId(subPath);
+                if (!_directoryContentsCache.TryGetValue(subPath, out IDirectoryContents directoryContents))
+                {
+                    var obj = GetObjectId(subPath);
+                    directoryContents = obj == null ? (IDirectoryContents)NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _syncLock, _content, _contentProperties);
+                    _directoryContentsCache.TryAdd(subPath, directoryContents);
+                }
+                return directoryContents;
             }
-            if (obj == null)
-                return NotFoundDirectoryContents.Singleton;
-            return new WpdDirectoryContents(obj, _syncLock, _content, _contentProperties);
         }
 
         private string? GetObjectId(string subPath)
@@ -230,9 +236,13 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 throw new ArgumentException("file must be WpdFileInfo", nameof(file));
             }
 
-            var objsToDelete = new IPortableDevicePropVariantCollection();
-            objsToDelete.Add(new PROPVARIANT(wpdFileInfo.ObjectId));
-            _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
+            lock (_syncLock)
+            {
+                var objsToDelete = new IPortableDevicePropVariantCollection();
+                objsToDelete.Add(new PROPVARIANT(wpdFileInfo.ObjectId));
+                _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
+                _directoryContentsCache.Clear();
+            }
         }
 
         private void EnumerateRecursive(string objId, IPortableDeviceContent content, IPortableDeviceProperties properties)

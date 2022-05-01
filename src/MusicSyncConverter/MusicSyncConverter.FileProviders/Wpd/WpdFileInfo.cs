@@ -9,7 +9,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
     {
         internal string ObjectId { get; }
 
-        public WpdFileInfo(string objectId, PortableDeviceApi.IPortableDeviceContent content, PortableDeviceApi.IPortableDeviceProperties contentProperties)
+        public WpdFileInfo(string objectId, object synclock, PortableDeviceApi.IPortableDeviceContent content, PortableDeviceApi.IPortableDeviceProperties contentProperties)
         {
             ObjectId = objectId;
 
