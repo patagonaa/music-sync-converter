@@ -16,6 +16,10 @@ using static Vanara.PInvoke.PortableDeviceApi;
 
 namespace MusicSyncConverter.FileProviders.Wpd
 {
+    // https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices
+    // https://github.com/teapottiger/WPDApi/blob/62be7c4acc6104aef108769b4496b35b0a7fbd53/PortableDevices/PortableDevice.cs
+    // https://github.com/dahall/Vanara/blob/76722fbcf5c1f90dccee9751dc0367641e37b4f9/UnitTests/PInvoke/PortableDeviceApi/PortableDeviceApiTests.cs
+
     public class WpdSyncTarget : ISyncTarget, IDisposable
     {
         private readonly object _syncLock = new object();
@@ -23,7 +27,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly IPortableDeviceContent _content;
         private readonly IPortableDeviceProperties _contentProperties;
         private readonly string _basePath;
-        private readonly Dictionary<string, IDirectoryContents> _directoryContentsCache = new Dictionary<string, IDirectoryContents>();
+        private readonly Dictionary<string, IDirectoryContents> _directoryContentsCache;
 
         public WpdSyncTarget(string friendlyName, string basePath)
         {
@@ -31,6 +35,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             _content = _device.Content();
             _contentProperties = _content.Properties();
             _basePath = basePath;
+            _directoryContentsCache = new Dictionary<string, IDirectoryContents>(new PathComparer(IsCaseSensitive()));
         }
 
         private IPortableDevice GetDevice(string toFind)
@@ -129,7 +134,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     Marshal.ReleaseComObject(stream);
                 }
                 sw.Stop();
-                Debug.WriteLine("Write " + sw.ElapsedMilliseconds + "(" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
+                Debug.WriteLine("Write " + sw.ElapsedMilliseconds + " (" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
 
                 _directoryContentsCache.Clear();
             }
@@ -178,7 +183,11 @@ namespace MusicSyncConverter.FileProviders.Wpd
 
         public IFileInfo GetFileInfo(string subPath)
         {
-            throw new NotImplementedException();
+            lock (_syncLock)
+            {
+                var obj = GetObjectId(subPath);
+                return obj == null ? (IFileInfo)new NotFoundFileInfo(subPath) : new WpdFileInfo(obj, _syncLock, _content, _contentProperties);
+            }
         }
 
         public IDirectoryContents GetDirectoryContents(string subPath)
@@ -264,12 +273,14 @@ namespace MusicSyncConverter.FileProviders.Wpd
             {
                 EnumerateRecursive(obj, content, properties);
             }
-
         }
 
         public void Dispose()
         {
-            _device.Close();
+            lock (_syncLock)
+            {
+                _device.Close();
+            }
         }
     }
 }

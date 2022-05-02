@@ -112,10 +112,10 @@ namespace MusicSyncConverter
                 }
 
                 // delete additional files and empty directories
-                // TODO
                 DeleteAdditionalFiles(config, syncTarget, handledFiles, pathComparer, cancellationToken);
-                //DeleteEmptySubdirectories(config.TargetDir, cancellationToken);
+                DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
+                // TODO
                 //foreach (var updatedDir in updatedDirs.Distinct(pathComparer).OrderByDescending(x => x.Length))
                 //{
                 //    _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
@@ -450,16 +450,20 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteEmptySubdirectories(string parentDirectory, CancellationToken cancellationToken)
+        private void DeleteEmptySubdirectories(string path, ISyncTarget syncTarget, CancellationToken cancellationToken)
         {
-            foreach (string directory in Directory.GetDirectories(parentDirectory))
+            foreach (var item in syncTarget.GetDirectoryContents(path))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                DeleteEmptySubdirectories(directory, cancellationToken);
-                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                if (!item.IsDirectory)
+                    continue;
+
+                string subDir = Path.Combine(path, item.Name);
+                DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
+                if (!syncTarget.GetDirectoryContents(subDir).Any())
                 {
-                    Console.WriteLine($"Delete {directory}");
-                    Directory.Delete(directory, false);
+                    Console.WriteLine($"Delete {subDir}");
+                    syncTarget.Delete(syncTarget.GetFileInfo(subDir));
                 }
             }
         }

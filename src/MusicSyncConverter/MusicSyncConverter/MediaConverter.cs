@@ -23,10 +23,14 @@ namespace MusicSyncConverter
 
             var argsProcessor = args.OutputToFile(outFilePath, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
             {
-                x.WithArgument(new CustomArgument("-map 0"));
+                x.WithArgument(new CustomArgument("-map 0:a"));
                 if (hasExternalCover)
                 {
                     x.WithArgument(new CustomArgument("-map 1:v -disposition:v attached_pic"));
+                }
+                else
+                {
+                    x.WithArgument(new CustomArgument("-map 0:v? -disposition:v attached_pic"));
                 }
 
                 x.WithAudioCodec(encoderInfo.Codec);
