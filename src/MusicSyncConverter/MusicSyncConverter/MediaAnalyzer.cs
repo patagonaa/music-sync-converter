@@ -98,7 +98,7 @@ namespace MusicSyncConverter
                     SourceFileInfo = workItem.SourceFileInfo,
                     SourceTempFilePath = workItem.SourceTempFilePath,
                     TargetFilePath = targetFilePath,
-                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat.CoverCodec),
+                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat),
                     Tags = tags,
                     AlbumArtPath = workItem.AlbumArtPath
                 };
@@ -116,7 +116,7 @@ namespace MusicSyncConverter
             };
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, string coverCodec)
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, EncoderInfo fallbackFormat)
         {
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
@@ -128,7 +128,8 @@ namespace MusicSyncConverter
                         Codec = "copy",
                         Muxer = "ipod",
                         AdditionalFlags = "-movflags faststart",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".aac":
@@ -144,7 +145,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "asf",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".ogg":
@@ -153,7 +155,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "ogg",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".mp3":
@@ -161,7 +164,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "mp3",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".flac":
@@ -169,7 +173,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "flac",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".wav":
