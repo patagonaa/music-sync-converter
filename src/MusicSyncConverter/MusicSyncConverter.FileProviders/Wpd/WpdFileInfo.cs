@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.FileProviders;
 using System;
+using System.Diagnostics;
 using System.IO;
 using Vanara.PInvoke;
 
@@ -42,7 +43,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
 
                 if (key == PortableDeviceApi.WPD_OBJECT_CONTENT_TYPE)
                 {
-                    if(value.puuid == PortableDeviceApi.WPD_CONTENT_TYPE_FOLDER)
+                    if (value.puuid == PortableDeviceApi.WPD_CONTENT_TYPE_FOLDER)
                     {
                         IsDirectory = true;
                     }

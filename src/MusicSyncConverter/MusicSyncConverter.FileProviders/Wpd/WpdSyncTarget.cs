@@ -155,7 +155,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 foreach (var item in items.Enumerate())
                 {
                     var itemProperties = _contentProperties.GetValues(item, keys);
-                    if (itemProperties?.Enumerate().FirstOrDefault(x => x.Item1 == WPD_OBJECT_NAME).Item2?.bstrVal == pathPart)
+                    if (itemProperties?.GetStringValue(WPD_OBJECT_NAME) == pathPart)
                     {
                         foundChild = true;
                         currentObject = item;
@@ -218,7 +218,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 foreach (var item in items.Enumerate())
                 {
                     var itemProperties = _contentProperties.GetValues(item, keys);
-                    if (itemProperties?.Enumerate().FirstOrDefault(x => x.Item1 == WPD_OBJECT_NAME).Item2?.bstrVal == pathPart)
+                    if (itemProperties?.GetStringValue(WPD_OBJECT_NAME) == pathPart)
                     {
                         foundChild = true;
                         currentObject = item;

@@ -415,7 +415,7 @@ namespace MusicSyncConverter
 
         private void DeleteAdditionalFiles(SyncConfig config, ISyncTarget syncTarget, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
         {
-            var files = GetAllFiles("", syncTarget);
+            var files = GetAllFiles("", syncTarget.GetFileInfo(""), syncTarget);
             foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -428,17 +428,16 @@ namespace MusicSyncConverter
             }
         }
 
-        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string path, ISyncTarget syncTarget)
+        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string filePath, IFileInfo fileInfo, ISyncTarget syncTarget)
         {
-            var fileInfo = syncTarget.GetFileInfo(path);
             if (!fileInfo.Exists)
                 yield break;
 
             if (fileInfo.IsDirectory)
             {
-                foreach (var item in syncTarget.GetDirectoryContents(path))
+                foreach (var childFileInfo in syncTarget.GetDirectoryContents(filePath))
                 {
-                    foreach (var file in GetAllFiles(Path.Combine(path, item.Name), syncTarget))
+                    foreach (var file in GetAllFiles(Path.Combine(filePath, childFileInfo.Name), childFileInfo, syncTarget))
                     {
                         yield return file;
                     }
@@ -446,7 +445,7 @@ namespace MusicSyncConverter
             }
             else
             {
-                yield return (path, fileInfo);
+                yield return (filePath, fileInfo);
             }
         }
 
