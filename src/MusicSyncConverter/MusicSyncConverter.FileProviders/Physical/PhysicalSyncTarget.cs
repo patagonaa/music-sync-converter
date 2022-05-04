@@ -20,7 +20,7 @@ namespace MusicSyncConverter.FileProviders.Physical
 
         public async Task WriteFile(string path, Stream content, DateTimeOffset modified, CancellationToken cancellationToken)
         {
-            var absolutePath = Path.Combine(_basePath, path);
+            var absolutePath = Path.Join(_basePath, path);
 
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
 
@@ -52,21 +52,27 @@ namespace MusicSyncConverter.FileProviders.Physical
 
         public void Delete(IFileInfo file)
         {
-            if (!(file is PhysicalFileInfo physicalFile))
+            if (file is PhysicalFileInfo)
             {
-                throw new ArgumentException("file must be PhysicalFileInfo", nameof(file));
-            }
+                var targetFileFull = file.PhysicalPath;
 
-            var targetFileFull = physicalFile.PhysicalPath;
-
-            File.Delete(targetFileFull);
-
-            // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
-            // https://twitter.com/patagona/status/1444626808935264261
-            if (File.Exists(targetFileFull))
-            {
                 File.Delete(targetFileFull);
-                Console.WriteLine($"Couldn't delete {targetFileFull} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
+
+                // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
+                // https://twitter.com/patagona/status/1444626808935264261
+                if (File.Exists(targetFileFull))
+                {
+                    File.Delete(targetFileFull);
+                    Console.WriteLine($"Couldn't delete {targetFileFull} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
+                }
+            }
+            else if (file is PhysicalDirectoryInfo)
+            {
+                Directory.Delete(file.PhysicalPath);
+            }
+            else
+            {
+                throw new ArgumentException("file must be PhysicalFileInfo or PhysicalDirectoryInfo", nameof(file));
             }
         }
     }

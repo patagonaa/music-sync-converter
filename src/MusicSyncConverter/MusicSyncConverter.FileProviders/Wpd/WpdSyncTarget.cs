@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
@@ -27,7 +26,9 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly IPortableDeviceContent _content;
         private readonly IPortableDeviceProperties _contentProperties;
         private readonly string _basePath;
+        private readonly PathComparer _pathComparer;
         private readonly Dictionary<string, IDirectoryContents> _directoryContentsCache;
+        private readonly Dictionary<string, string> _objectIdCache;
 
         public WpdSyncTarget(string friendlyName, string basePath)
         {
@@ -35,7 +36,9 @@ namespace MusicSyncConverter.FileProviders.Wpd
             _content = _device.Content();
             _contentProperties = _content.Properties();
             _basePath = basePath;
-            _directoryContentsCache = new Dictionary<string, IDirectoryContents>(new PathComparer(IsCaseSensitive()));
+            _pathComparer = new PathComparer(IsCaseSensitive());
+            _directoryContentsCache = new Dictionary<string, IDirectoryContents>(_pathComparer);
+            _objectIdCache = new Dictionary<string, string>(_pathComparer);
         }
 
         private IPortableDevice GetDevice(string toFind)
@@ -76,27 +79,12 @@ namespace MusicSyncConverter.FileProviders.Wpd
             lock (_syncLock)
             {
                 var sw = Stopwatch.StartNew();
-                var fullPath = Path.Combine(_basePath, subPath);
-                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(fullPath));
-                var fileName = Path.GetFileName(fullPath);
+                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(subPath));
+                var fileName = Path.GetFileName(subPath);
                 Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds);
                 sw.Restart();
 
-                string? existingFileObjId = null;
-                foreach (var objId in _content.EnumObjects(0, directoryObjectId).Enumerate())
-                {
-                    var propsToRead = new IPortableDeviceKeyCollection();
-                    propsToRead.Add(WPD_OBJECT_NAME);
-
-                    var existingFileProps = _contentProperties.GetValues(objId, propsToRead);
-                    var existingFileName = existingFileProps.GetStringValue(WPD_OBJECT_NAME);
-                    if (existingFileName == fileName)
-                    {
-                        existingFileObjId = objId;
-                        break;
-                    }
-                }
-
+                var existingFileObjId = GetObjectId(fileName, directoryObjectId);
                 if (existingFileObjId != null)
                 {
                     var objsToDelete = new IPortableDevicePropVariantCollection();
@@ -136,14 +124,14 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 sw.Stop();
                 Debug.WriteLine("Write " + sw.ElapsedMilliseconds + " (" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
 
-                _directoryContentsCache.Clear();
+                ClearCaches();
             }
             return Task.CompletedTask;
         }
 
-        private string CreateDirectoryStructure(string fullPath)
+        private string CreateDirectoryStructure(string subPath)
         {
-            var pathParts = fullPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var pathParts = Path.Join(_basePath, subPath).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var keys = new IPortableDeviceKeyCollection();
             keys.Add(WPD_OBJECT_NAME);
 
@@ -155,7 +143,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 foreach (var item in items.Enumerate())
                 {
                     var itemProperties = _contentProperties.GetValues(item, keys);
-                    if (itemProperties?.GetStringValue(WPD_OBJECT_NAME) == pathPart)
+                    if (_pathComparer.Equals(itemProperties?.GetStringValue(WPD_OBJECT_NAME), pathPart))
                     {
                         foundChild = true;
                         currentObject = item;
@@ -181,12 +169,22 @@ namespace MusicSyncConverter.FileProviders.Wpd
             return _content.CreateObjectWithPropertiesOnly(properties);
         }
 
-        public IFileInfo GetFileInfo(string subPath)
+        public IFileInfo? GetFileInfo(string subPath)
         {
             lock (_syncLock)
             {
                 var obj = GetObjectId(subPath);
-                return obj == null ? (IFileInfo)new NotFoundFileInfo(subPath) : new WpdFileInfo(obj, _syncLock, _content, _contentProperties);
+                if (obj == null)
+                    return new NotFoundFileInfo(subPath);
+
+                var fileInfo = new WpdFileInfo(obj, _syncLock, _content, _contentProperties);
+
+                // this part is really stupid but at least PhysicalFileProvider returns NotFound in this case,
+                // so we do the same here so callers don't rely on GetFileInfo working for directories.
+                if (fileInfo.IsDirectory)
+                    return new NotFoundFileInfo(subPath);
+
+                return fileInfo;
             }
         }
 
@@ -204,33 +202,61 @@ namespace MusicSyncConverter.FileProviders.Wpd
             }
         }
 
-        private string? GetObjectId(string subPath)
+        private string? GetObjectId(string objPath)
         {
-            var pathParts = Path.Combine(_basePath, subPath).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var keys = new IPortableDeviceKeyCollection();
-            keys.Add(WPD_OBJECT_NAME);
+            var absolutePath = Path.Join(_basePath, objPath);
+            return GetObjectId(absolutePath, WPD_DEVICE_OBJECT_ID);
 
-            var currentObject = WPD_DEVICE_OBJECT_ID;
-            foreach (var pathPart in pathParts)
+        }
+        private string? GetObjectId(string objPath, string searchRootObjId)
+        {
+            var sw = Stopwatch.StartNew();
+            try
             {
-                var items = _content.EnumObjects(0, currentObject);
-                var foundChild = false;
-                foreach (var item in items.Enumerate())
+                var pathParts = objPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var keys = new IPortableDeviceKeyCollection();
+                keys.Add(WPD_OBJECT_NAME);
+
+                var currentObject = searchRootObjId;
+                var currentPath = string.Empty;
+                for (int i = 0; i < pathParts.Length; i++)
                 {
-                    var itemProperties = _contentProperties.GetValues(item, keys);
-                    if (itemProperties?.GetStringValue(WPD_OBJECT_NAME) == pathPart)
+                    string? pathPart = pathParts[i];
+                    currentPath = Path.Join(currentPath, pathPart);
+
+                    if(_objectIdCache.TryGetValue(currentPath, out var foundObjId))
                     {
-                        foundChild = true;
-                        currentObject = item;
-                        break;
+                        currentObject = foundObjId;
+                    }
+                    else
+                    {
+                        var items = _content.EnumObjects(0, currentObject);
+                        var foundChild = false;
+                        foreach (var item in items.Enumerate())
+                        {
+                            var itemProperties = _contentProperties.GetValues(item, keys);
+                            if (_pathComparer.Equals(itemProperties?.GetStringValue(WPD_OBJECT_NAME), pathPart))
+                            {
+                                foundChild = true;
+                                currentObject = item;
+                                break;
+                            }
+                        }
+                        if (foundChild)
+                        {
+                            _objectIdCache[currentPath] = currentObject;
+                            continue;
+                        }
+                        return null;
                     }
                 }
-                if (!foundChild)
-                {
-                    return null;
-                }
+                return currentObject;
             }
-            return currentObject;
+            finally
+            {
+                sw.Stop();
+                Debug.WriteLine("GetObjectId {0}", sw.ElapsedMilliseconds);
+            }
         }
 
         public IChangeToken Watch(string filter)
@@ -250,29 +276,14 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 var objsToDelete = new IPortableDevicePropVariantCollection();
                 objsToDelete.Add(new PROPVARIANT(wpdFileInfo.ObjectId));
                 _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
-                _directoryContentsCache.Clear();
+                ClearCaches();
             }
         }
 
-        private void EnumerateRecursive(string objId, IPortableDeviceContent content, IPortableDeviceProperties properties)
+        private void ClearCaches()
         {
-            var keys = new IPortableDeviceKeyCollection();
-            keys.Add(WPD_OBJECT_NAME);
-            keys.Add(WPD_OBJECT_DATE_MODIFIED);
-
-            var values = properties.GetValues(objId, keys);
-            foreach (var (key, value) in values.Enumerate())
-            {
-                if (key == WPD_OBJECT_NAME && value.bstrVal == "Interner gemeinsamer Speicher")
-                    return;
-                Console.WriteLine($"{key}: {value.Value}");
-            }
-
-            var objectIds = content.EnumObjects(0, objId);
-            foreach (var obj in objectIds.Enumerate())
-            {
-                EnumerateRecursive(obj, content, properties);
-            }
+            _directoryContentsCache.Clear();
+            _objectIdCache.Clear();
         }
 
         public void Dispose()

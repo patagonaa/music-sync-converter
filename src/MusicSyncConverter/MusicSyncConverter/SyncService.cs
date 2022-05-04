@@ -227,7 +227,7 @@ namespace MusicSyncConverter
                     {
                         ActionType = CompareResultType.Keep,
                         SourceFileInfo = sourceFile,
-                        ExistingTargetFile = Path.Combine(targetDirPath, targetInfos[0].Name)
+                        ExistingTargetFile = Path.Join(targetDirPath, targetInfos[0].Name)
                     };
                 }
                 else
@@ -415,12 +415,13 @@ namespace MusicSyncConverter
 
         private void DeleteAdditionalFiles(SyncConfig config, ISyncTarget syncTarget, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
         {
-            var files = GetAllFiles("", syncTarget.GetFileInfo(""), syncTarget);
+            var files = GetAllFiles("", syncTarget);
+            var toDelete = new List<(string Path, IFileInfo File)>();
             foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (!handledFiles.Contains(path, pathComparer))
+                if (!handledFiles.Contains(path, pathComparer) && !file.Name.StartsWith('.'))
                 {
                     Console.WriteLine($"Delete {path}");
                     syncTarget.Delete(file);
@@ -428,24 +429,22 @@ namespace MusicSyncConverter
             }
         }
 
-        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string filePath, IFileInfo fileInfo, ISyncTarget syncTarget)
+        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget)
         {
-            if (!fileInfo.Exists)
-                yield break;
-
-            if (fileInfo.IsDirectory)
+            foreach (var fileInfo in syncTarget.GetDirectoryContents(directoryPath))
             {
-                foreach (var childFileInfo in syncTarget.GetDirectoryContents(filePath))
+                var filePath = Path.Join(directoryPath, fileInfo.Name);
+                if (fileInfo.IsDirectory)
                 {
-                    foreach (var file in GetAllFiles(Path.Combine(filePath, childFileInfo.Name), childFileInfo, syncTarget))
+                    foreach (var file in GetAllFiles(filePath, syncTarget))
                     {
                         yield return file;
                     }
                 }
-            }
-            else
-            {
-                yield return (filePath, fileInfo);
+                else
+                {
+                    yield return (filePath, fileInfo);
+                }
             }
         }
 
@@ -457,12 +456,12 @@ namespace MusicSyncConverter
                 if (!item.IsDirectory)
                     continue;
 
-                string subDir = Path.Combine(path, item.Name);
+                string subDir = Path.Join(path, item.Name);
                 DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
                 if (!syncTarget.GetDirectoryContents(subDir).Any())
                 {
                     Console.WriteLine($"Delete {subDir}");
-                    syncTarget.Delete(syncTarget.GetFileInfo(subDir));
+                    syncTarget.Delete(item);
                 }
             }
         }
