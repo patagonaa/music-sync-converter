@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
@@ -81,7 +82,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 var sw = Stopwatch.StartNew();
                 var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(subPath));
                 var fileName = Path.GetFileName(subPath);
-                Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds);
+                Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds+"ms");
                 sw.Restart();
 
                 var existingFileObjId = GetObjectId(fileName, directoryObjectId);
@@ -92,7 +93,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
                 }
 
-                Debug.WriteLine("DeleteExisting " + sw.ElapsedMilliseconds);
+                Debug.WriteLine("DeleteExisting " + sw.ElapsedMilliseconds+"ms");
                 sw.Restart();
 
                 var properties = new IPortableDeviceValues();
@@ -122,7 +123,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     Marshal.ReleaseComObject(stream);
                 }
                 sw.Stop();
-                Debug.WriteLine("Write " + sw.ElapsedMilliseconds + " (" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
+                Debug.WriteLine("Write " + sw.ElapsedMilliseconds + "ms (" + (content.Length / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2") + "MiB/s)");
 
                 ClearCaches();
             }
@@ -224,7 +225,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     string? pathPart = pathParts[i];
                     currentPath = Path.Join(currentPath, pathPart);
 
-                    if(_objectIdCache.TryGetValue(currentPath, out var foundObjId))
+                    if (_objectIdCache.TryGetValue(currentPath, out var foundObjId))
                     {
                         currentObject = foundObjId;
                     }
@@ -255,7 +256,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             finally
             {
                 sw.Stop();
-                Debug.WriteLine("GetObjectId {0}", sw.ElapsedMilliseconds);
+                Debug.WriteLine("GetObjectId {0}ms", sw.ElapsedMilliseconds);
             }
         }
 
@@ -264,20 +265,32 @@ namespace MusicSyncConverter.FileProviders.Wpd
             throw new NotImplementedException();
         }
 
-        public void Delete(IFileInfo file)
+        public void Delete(IReadOnlyCollection<IFileInfo> files)
         {
-            if (!(file is WpdFileInfo wpdFileInfo))
+            var wpdFiles = files.OfType<WpdFileInfo>().ToList();
+            if (wpdFiles.Count != files.Count)
             {
-                throw new ArgumentException("file must be WpdFileInfo", nameof(file));
+                throw new ArgumentException("all files must be WpdFileInfo", nameof(files));
             }
 
             lock (_syncLock)
             {
+                var sw = Stopwatch.StartNew();
                 var objsToDelete = new IPortableDevicePropVariantCollection();
-                objsToDelete.Add(new PROPVARIANT(wpdFileInfo.ObjectId));
+                foreach (var wpdFile in wpdFiles)
+                {
+                    objsToDelete.Add(new PROPVARIANT(wpdFile.ObjectId));
+                }
                 _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
                 ClearCaches();
+                sw.Stop();
+                Debug.WriteLine("Delete {0} in {1}ms", wpdFiles.Count, sw.ElapsedMilliseconds);
             }
+        }
+
+        public void Delete(IFileInfo file)
+        {
+            Delete(new[] { file });
         }
 
         private void ClearCaches()

@@ -416,17 +416,18 @@ namespace MusicSyncConverter
         private void DeleteAdditionalFiles(SyncConfig config, ISyncTarget syncTarget, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
         {
             var files = GetAllFiles("", syncTarget);
-            var toDelete = new List<(string Path, IFileInfo File)>();
+            var toDelete = new List<IFileInfo>();
             foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (!handledFiles.Contains(path, pathComparer) && !file.Name.StartsWith('.'))
                 {
+                    toDelete.Add(file);
                     Console.WriteLine($"Delete {path}");
-                    syncTarget.Delete(file);
                 }
             }
+            syncTarget.Delete(toDelete);
         }
 
         private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget)

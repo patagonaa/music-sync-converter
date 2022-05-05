@@ -2,6 +2,7 @@
 using Microsoft.Extensions.FileProviders.Physical;
 using MusicSyncConverter.FileProviders.Abstractions;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -73,6 +74,14 @@ namespace MusicSyncConverter.FileProviders.Physical
             else
             {
                 throw new ArgumentException("file must be PhysicalFileInfo or PhysicalDirectoryInfo", nameof(file));
+            }
+        }
+
+        public void Delete(IReadOnlyCollection<IFileInfo> files)
+        {
+            foreach (var file in files)
+            {
+                Delete(file);
             }
         }
     }
