@@ -5,13 +5,23 @@ Works on Windows and Linux, macOS is untested.
 ## Usage:
 `.\MusicSyncConverter.exe config.json`
 
+### Supported sources / targets
+Instead of just syncing from directory to directory you can use some different file providers (or even write your own):
+#### Sources
+- File system: `file://` (for example `file://C:/Users/me/Music` or `file://~/Music` or `file:///home/me/Music`)
+- WebDAV: `http(s)://` (for example `https://user:password@nextcloud.example.com/remote.php/dav/files/me/Music`)
+#### Targets
+- File system: `file://` (for example `file://F:/Music` or `file:///mnt/usb/Music`)
+- (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices) : `wpd://` (for example `wpd://My Android Phone/disk/Music`)
+    - Don't expect this to be rock-solid. It's MTP, what do you expect?
+
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
 - Copy/Remux all MP3, WMA and AAC-LC files
 - Convert all unsupported files (fall back to AAC-LC 192kbit/s)
 - Replace unsupported characters (in directory and file names, and tag values)
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
-- Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\*\Instrumentals` (only `*` and `**` are supported)
+- Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (only `*` and `**` are supported)
 - Change every first character of file/dir names to uppercase so things that sort case-sensitive work properly
 - Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 
@@ -80,8 +90,7 @@ Works on Windows and Linux, macOS is untested.
                 }
             ],
             "NormalizeCase": true // change every first character of file/dir names to uppercase
-        },
-        "FatSortMode": "Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders"
+        }
     },
     "SourceDir": "file://Z:\\Audio\\",
     "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
@@ -93,11 +102,11 @@ Works on Windows and Linux, macOS is untested.
         ".wma",
         ".wav"
     ],
-    "TargetDir": "file://E:\\Audio\\",
+    "TargetDir": "file://E:\\Audio\\?fatSortMode=Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders", default is "None"
     "Exclude": [
         "Webradio",
         "Music\\Artists\\Nickelback",
-        "Music\\Artists\\*\\Instrumentals"
+        "Music\\Artists\\**\\Instrumentals"
     ],
     "WorkersRead": 8, // max number of threads to use for reading files
     "WorkersConvert": 8, // max number of threads to use for converting files
@@ -106,8 +115,6 @@ Works on Windows and Linux, macOS is untested.
 ```
 
 You can also split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
-
-Also, you can use either the file system (`file://C:\Music` or `file://C:/Music` or `file:///home/user/Music`) or a WebDAV server (`https://user:password@nextcloud.example.com/remote.php/dav/files/user/Music`) as a source.
 
 "as reported by ffprobe" =>
 ```

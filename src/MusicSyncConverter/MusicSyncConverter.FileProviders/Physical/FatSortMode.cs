@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MusicSyncConverter.Config
+namespace MusicSyncConverter.FileProviders.Physical
 {
     [Flags]
     public enum FatSortMode

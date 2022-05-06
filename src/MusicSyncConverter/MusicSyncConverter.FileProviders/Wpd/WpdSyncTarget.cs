@@ -265,7 +265,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             throw new NotImplementedException();
         }
 
-        public void Delete(IReadOnlyCollection<IFileInfo> files)
+        public Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken)
         {
             var wpdFiles = files.OfType<WpdFileInfo>().ToList();
             if (wpdFiles.Count != files.Count)
@@ -286,17 +286,23 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 sw.Stop();
                 Debug.WriteLine("Delete {0} in {1}ms", wpdFiles.Count, sw.ElapsedMilliseconds);
             }
+            return Task.CompletedTask;
         }
 
-        public void Delete(IFileInfo file)
+        public Task Delete(IFileInfo file, CancellationToken cancellationToken)
         {
-            Delete(new[] { file });
+            return Delete(new[] { file }, cancellationToken);
         }
 
         private void ClearCaches()
         {
             _directoryContentsCache.Clear();
             _objectIdCache.Clear();
+        }
+
+        public Task Complete(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
         }
 
         public void Dispose()

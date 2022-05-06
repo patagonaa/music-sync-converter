@@ -11,7 +11,8 @@ namespace MusicSyncConverter.FileProviders.Abstractions
     {
         bool IsCaseSensitive();
         Task WriteFile(string path, Stream content, DateTimeOffset modified, CancellationToken cancellationToken);
-        void Delete(IFileInfo file);
-        void Delete(IReadOnlyCollection<IFileInfo> files);
+        Task Delete(IFileInfo file, CancellationToken cancellationToken);
+        Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken);
+        Task Complete(CancellationToken cancellationToken);
     }
 }

@@ -28,17 +28,17 @@
             {
                 "Extension": ".ogg",
                 "Codec": "opus"
+            },
+            {
+                "Extension": ".flac",
+                "Codec": "flac",
+                "MaxChannels": 2
+            },
+            {
+                "Extension": ".wav",
+                "MaxSampleRateHz": 44100,
+                "MaxChannels": 2
             }
-            //{ // android also supports FLAC and WAV, but I want to save some space
-            //    "Extension": ".flac",
-            //    "Codec": "flac",
-            //    "MaxChannels": 2
-            //},
-            //{
-            //    "Extension": ".wav",
-            //    "MaxSampleRateHz": 44100,
-            //    "MaxChannels": 2
-            //}
         ],
         "FallbackFormat": {
             "Extension": ".m4a", // this weird combination of m4a and opus is here, because FFMPEG can't add album covers to ogg containers and tags are broken with matroska for some reason

@@ -22,7 +22,6 @@ namespace MusicSyncConverter
         private readonly TextSanitizer _sanitizer;
         private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
-        private readonly FatSorter _fatSorter;
         private readonly PathMatcher _pathMatcher;
 
         private static readonly TimeSpan _fileTimestampDelta = TimeSpan.FromSeconds(2); // FAT32 write time has 2 seconds precision
@@ -34,7 +33,6 @@ namespace MusicSyncConverter
             _sanitizer = new TextSanitizer();
             _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
-            _fatSorter = new FatSorter();
             _pathMatcher = new PathMatcher();
         }
 
@@ -84,7 +82,7 @@ namespace MusicSyncConverter
                 var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
                 var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new[] { await _analyzer.Analyze(config, x, infoLogMessages) }.Where(y => y != null), workerOptions);
                 var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
-                var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, updatedDirs, cancellationToken), writeOptions);
+                var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                 compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
                 readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -115,11 +113,7 @@ namespace MusicSyncConverter
                 DeleteAdditionalFiles(config, syncTarget, handledFiles, pathComparer, cancellationToken);
                 DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
-                // TODO
-                //foreach (var updatedDir in updatedDirs.Distinct(pathComparer).OrderByDescending(x => x.Length))
-                //{
-                //    _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
-                //}
+                await syncTarget.Complete(cancellationToken);
             }
 
             foreach (var infoLogMessage in infoLogMessages.Distinct())
@@ -374,21 +368,11 @@ namespace MusicSyncConverter
             return null;
         }
 
-        private async Task WriteFile(OutputFile file, ISyncTarget syncTarget, ConcurrentBag<string> updatedDirectories, CancellationToken cancellationToken)
+        private async Task WriteFile(OutputFile file, ISyncTarget syncTarget, CancellationToken cancellationToken)
         {
             try
             {
                 Console.WriteLine($"--> Write {file.Path}");
-                updatedDirectories.Add(Path.GetDirectoryName(file.Path));
-
-                // TODO
-                //var dirInfo = new DirectoryInfo(directory);
-                //updatedDirectories.Add(dirInfo.FullName);
-                //while (!dirInfo.Exists)
-                //{
-                //    dirInfo = dirInfo.Parent;
-                //    updatedDirectories.Add(dirInfo.FullName);
-                //}
 
                 using (var tmpFile = File.OpenRead(file.TempFilePath))
                 {
@@ -427,7 +411,7 @@ namespace MusicSyncConverter
                     Console.WriteLine($"Delete {path}");
                 }
             }
-            syncTarget.Delete(toDelete);
+            syncTarget.Delete(toDelete, cancellationToken);
         }
 
         private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget)
@@ -462,7 +446,7 @@ namespace MusicSyncConverter
                 if (!syncTarget.GetDirectoryContents(subDir).Any())
                 {
                     Console.WriteLine($"Delete {subDir}");
-                    syncTarget.Delete(item);
+                    syncTarget.Delete(item, cancellationToken);
                 }
             }
         }
