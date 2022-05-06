@@ -4,3 +4,4 @@ obj/
 .vscode
 .vs
 src/MusicSyncConverter/MusicSyncConverter/configs/config.json
+*.user

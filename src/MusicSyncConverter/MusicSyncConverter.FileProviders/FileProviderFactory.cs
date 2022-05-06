@@ -4,9 +4,9 @@ using Microsoft.Extensions.Options;
 using System;
 using System.Net;
 
-namespace MusicSyncConverter
+namespace MusicSyncConverter.FileProviders
 {
-    internal class FileProviderFactory
+    public class FileProviderFactory
     {
         public IFileProvider Get(string uriString)
         {

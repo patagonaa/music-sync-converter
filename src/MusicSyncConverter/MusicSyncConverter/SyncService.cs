@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.FileProviders;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.FileProviders;
+using MusicSyncConverter.FileProviders.Abstractions;
 using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
@@ -16,10 +18,10 @@ namespace MusicSyncConverter
     class SyncService
     {
         private readonly FileProviderFactory _fileProviderFactory;
+        private readonly SyncTargetFactory _syncTargetFactory;
         private readonly TextSanitizer _sanitizer;
         private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
-        private readonly FatSorter _fatSorter;
         private readonly PathMatcher _pathMatcher;
 
         private static readonly TimeSpan _fileTimestampDelta = TimeSpan.FromSeconds(2); // FAT32 write time has 2 seconds precision
@@ -27,10 +29,10 @@ namespace MusicSyncConverter
         public SyncService()
         {
             _fileProviderFactory = new FileProviderFactory();
+            _syncTargetFactory = new SyncTargetFactory();
             _sanitizer = new TextSanitizer();
             _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
-            _fatSorter = new FatSorter();
             _pathMatcher = new PathMatcher();
         }
 
@@ -65,52 +67,53 @@ namespace MusicSyncConverter
                 CancellationToken = cancellationToken
             };
 
-            var targetCaseSensitive = IsCaseSensitive(config.TargetDir);
-
             var handledFiles = new ConcurrentBag<string>();
             var updatedDirs = new ConcurrentBag<string>();
             var infoLogMessages = new ConcurrentBag<string>();
 
-            var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(config, x) }.Where(y => y != null), workerOptions);
-            var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
-            var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new[] { await _analyzer.Analyze(config, x, infoLogMessages) }.Where(y => y != null), workerOptions);
-            var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
-            var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, updatedDirs, cancellationToken), writeOptions);
+            var syncTarget = _syncTargetFactory.Get(config.TargetDir);
 
-            compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
-
-            var fileProvider = _fileProviderFactory.Get(config.SourceDir);
-            using (fileProvider as IDisposable)
+            using (syncTarget as IDisposable)
             {
-                // start pipeline by adding files to check for changes
-                _ = ReadDirs(config, fileProvider, compareBlock, targetCaseSensitive, cancellationToken);
+                var targetCaseSensitive = syncTarget.IsCaseSensitive();
+                var pathComparer = new PathComparer(targetCaseSensitive);
 
-                // wait until last pipeline element is done
-                try
+                var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(config, pathComparer, syncTarget, x) }.Where(y => y != null), readOptions);
+                var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
+                var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new[] { await _analyzer.Analyze(config, x, infoLogMessages) }.Where(y => y != null), workerOptions);
+                var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
+                var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
+
+                compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
+                readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+                analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
+                convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+
+                var fileProvider = _fileProviderFactory.Get(config.SourceDir);
+                using (fileProvider as IDisposable)
                 {
-                    await writeBlock.Completion;
+                    // start pipeline by adding files to check for changes
+                    _ = ReadDirs(config, fileProvider, compareBlock, targetCaseSensitive, cancellationToken);
+
+                    // wait until last pipeline element is done
+                    try
+                    {
+                        await writeBlock.Completion;
+                    }
+                    catch (Exception)
+                    {
+                        // cancel everything as faults only get propagated to the blocks after the fault
+                        // and we need all blocks to stop so we can exit the application
+                        cancallationTokenSource.Cancel();
+                        throw;
+                    }
                 }
-                catch (Exception)
-                {
-                    // cancel everything as faults only get propagated to the blocks after the fault
-                    // and we need all blocks to stop so we can exit the application
-                    cancallationTokenSource.Cancel();
-                    throw;
-                }
-            }
 
-            var pathComparer = new PathComparer(targetCaseSensitive);
+                // delete additional files and empty directories
+                DeleteAdditionalFiles(config, syncTarget, handledFiles, pathComparer, cancellationToken);
+                DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
-            // delete additional files and empty directories
-            DeleteAdditionalFiles(config, handledFiles, pathComparer, cancellationToken);
-            DeleteEmptySubdirectories(config.TargetDir, cancellationToken);
-
-            foreach (var updatedDir in updatedDirs.Distinct(pathComparer).OrderByDescending(x => x.Length))
-            {
-                _fatSorter.Sort(updatedDir, config.DeviceConfig.FatSortMode, false, cancellationToken);
+                await syncTarget.Complete(cancellationToken);
             }
 
             foreach (var infoLogMessage in infoLogMessages.Distinct())
@@ -124,8 +127,8 @@ namespace MusicSyncConverter
             try
             {
                 var r = new Random();
-                var files = ReadDir(config, fileProvider, "", targetCaseSensitive, cancellationToken)
-                    .OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
+                var files = ReadDir(config, fileProvider, "", targetCaseSensitive, cancellationToken);
+                //.OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
                 foreach (var file in files)
                 {
                     await targetBlock.SendAsync(file, cancellationToken);
@@ -151,23 +154,6 @@ namespace MusicSyncConverter
             }
         }
 
-        private bool IsCaseSensitive(string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-            var path1 = Path.Combine(targetDir, "test.tmp");
-            var path2 = Path.Combine(targetDir, "TEST.tmp");
-            File.Delete(path1);
-            File.Delete(path2);
-            using (File.Create(path1))
-            {
-            }
-
-            var toReturn = !File.Exists(path2);
-
-            File.Delete(path1);
-            return toReturn;
-        }
-
         private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, IFileProvider fileProvider, string dir, bool caseSensitive, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -186,7 +172,7 @@ namespace MusicSyncConverter
                     {
                         FileProvider = fileProvider,
                         RelativePath = Path.Join(dir, file.Name),
-                        ModifiedDate = file.LastModified.LocalDateTime
+                        ModifiedDate = file.LastModified
                     };
                 }
             }
@@ -200,24 +186,26 @@ namespace MusicSyncConverter
             }
         }
 
-        private ReadWorkItem CompareDates(SyncConfig config, SourceFileInfo sourceFile)
+        private ReadWorkItem CompareDates(SyncConfig config, PathComparer pathComparer, ISyncTarget syncTarget, SourceFileInfo sourceFile)
         {
             try
             {
-                var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true, out _));
-                string targetDirPath = Path.GetDirectoryName(targetFilePath);
+                var relativeTargetPath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true, out _);
+                string targetDirPath = Path.GetDirectoryName(relativeTargetPath);
 
-                var directoryInfo = new DirectoryInfo(targetDirPath);
-                var targetInfos = directoryInfo.Exists ? directoryInfo.GetFiles($"{Path.GetFileNameWithoutExtension(targetFilePath)}.*") : Array.Empty<FileInfo>();
+                var files = syncTarget.GetDirectoryContents(targetDirPath);
+
+                var targetInfos = files.Exists ? files.Where(x => pathComparer.Equals(Path.GetFileNameWithoutExtension(relativeTargetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
 
                 if (targetInfos.Length != 1) // zero or multiple target files
                 {
-                    // if there are multiple target files, delete them
-                    foreach (var targetInfo in targetInfos)
-                    {
-                        Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
-                        targetInfo.Delete();
-                    }
+                    //TODO
+                    //// if there are multiple target files, delete them
+                    //foreach (var targetInfo in targetInfos)
+                    //{
+                    //    Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
+                    //    targetInfo.Delete();
+                    //}
                     return new ReadWorkItem
                     {
                         ActionType = CompareResultType.Replace,
@@ -226,14 +214,14 @@ namespace MusicSyncConverter
                 }
 
                 // only one target item, so check if it is up to date
-                var targetDate = targetInfos[0].LastWriteTime;
+                var targetDate = targetInfos[0].LastModified;
                 if (FileDatesEqual(sourceFile.ModifiedDate, targetDate))
                 {
                     return new ReadWorkItem
                     {
                         ActionType = CompareResultType.Keep,
                         SourceFileInfo = sourceFile,
-                        ExistingTargetFile = targetInfos[0].FullName
+                        ExistingTargetFile = Path.Join(targetDirPath, targetInfos[0].Name)
                     };
                 }
                 else
@@ -251,7 +239,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private bool FileDatesEqual(DateTime dateTime, DateTime dateTime1)
+        private bool FileDatesEqual(DateTimeOffset dateTime, DateTimeOffset dateTime1)
         {
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
@@ -281,17 +269,42 @@ namespace MusicSyncConverter
                 case CompareResultType.Replace:
                     Console.WriteLine($"--> Read {workItem.SourceFileInfo.RelativePath}");
 
+                    var fileProvider = workItem.SourceFileInfo.FileProvider;
+
                     string tmpFilePath;
-                    using (var inFile = workItem.SourceFileInfo.FileProvider.GetFileInfo(workItem.SourceFileInfo.RelativePath).CreateReadStream())
+                    using (var inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.RelativePath).CreateReadStream())
                     {
                         tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
+                    }
+
+                    var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
+                    string albumCoverPath = null;
+                    foreach (var coverVariant in coverVariants)
+                    {
+                        var coverFileInfo = fileProvider.GetFileInfo(Path.Join(Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath), coverVariant));
+                        if (coverFileInfo.Exists)
+                        {
+                            if (coverFileInfo.PhysicalPath != null)
+                            {
+                                albumCoverPath = coverFileInfo.PhysicalPath;
+                            }
+                            else
+                            {
+                                using (var coverStream = coverFileInfo.CreateReadStream())
+                                {
+                                    albumCoverPath = await TempFileHelper.CopyToTempFile(coverStream, cancellationToken);
+                                }
+                            }
+                            break;
+                        }
                     }
 
                     toReturn = new AnalyzeWorkItem
                     {
                         ActionType = AnalyzeActionType.CopyOrConvert,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        SourceTempFilePath = tmpFilePath
+                        SourceTempFilePath = tmpFilePath,
+                        AlbumArtPath = albumCoverPath
                     };
                     Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
                     break;
@@ -319,7 +332,7 @@ namespace MusicSyncConverter
                             var sourcePath = workItem.SourceTempFilePath;
                             var outputFormat = workItem.EncoderInfo;
 
-                            var outPath = await _converter.Convert(sourcePath, outputFormat, workItem.Tags, cancellationToken);
+                            var outPath = await _converter.Convert(sourcePath, workItem.AlbumArtPath, outputFormat, workItem.Tags, cancellationToken);
 
                             handledFiles.Add(workItem.TargetFilePath);
                             toReturn = new OutputFile
@@ -355,33 +368,18 @@ namespace MusicSyncConverter
             return null;
         }
 
-        private async Task WriteFile(OutputFile file, ConcurrentBag<string> updatedDirectories, CancellationToken cancellationToken)
+        private async Task WriteFile(OutputFile file, ISyncTarget syncTarget, CancellationToken cancellationToken)
         {
             try
             {
                 Console.WriteLine($"--> Write {file.Path}");
-                var directory = Path.GetDirectoryName(file.Path);
 
-                var dirInfo = new DirectoryInfo(directory);
-                updatedDirectories.Add(dirInfo.FullName);
-                while (!dirInfo.Exists)
-                {
-                    dirInfo = dirInfo.Parent;
-                    updatedDirectories.Add(dirInfo.FullName);
-                }
-
-                Directory.CreateDirectory(directory);
-
-                File.Delete(file.Path); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
                 using (var tmpFile = File.OpenRead(file.TempFilePath))
                 {
-                    using (var outputFile = File.OpenWrite(file.Path))
-                    {
-                        await tmpFile.CopyToAsync(outputFile, cancellationToken);
-                    }
+                    await syncTarget.WriteFile(file.Path, tmpFile, file.ModifiedDate, cancellationToken);
                 }
+
                 File.Delete(file.TempFilePath);
-                File.SetLastWriteTime(file.Path, file.ModifiedDate);
                 Console.WriteLine($"<-- Write {file.Path}");
             }
             catch (TaskCanceledException)
@@ -399,38 +397,56 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(SyncConfig config, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
+        private void DeleteAdditionalFiles(SyncConfig config, ISyncTarget syncTarget, ConcurrentBag<string> handledFiles, IEqualityComparer<string> pathComparer, CancellationToken cancellationToken)
         {
-            foreach (var targetFileFull in Directory.GetFiles(config.TargetDir, "*", SearchOption.AllDirectories))
+            var files = GetAllFiles("", syncTarget);
+            var toDelete = new List<IFileInfo>();
+            foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (!handledFiles.Contains(targetFileFull, pathComparer))
+                if (!handledFiles.Contains(path, pathComparer) && !file.Name.StartsWith('.'))
                 {
-                    Console.WriteLine($"Delete {targetFileFull}");
-                    File.Delete(targetFileFull);
+                    toDelete.Add(file);
+                    Console.WriteLine($"Delete {path}");
+                }
+            }
+            syncTarget.Delete(toDelete, cancellationToken);
+        }
 
-                    // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
-                    // https://twitter.com/patagona/status/1444626808935264261
-                    if (File.Exists(targetFileFull))
+        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget)
+        {
+            foreach (var fileInfo in syncTarget.GetDirectoryContents(directoryPath))
+            {
+                var filePath = Path.Join(directoryPath, fileInfo.Name);
+                if (fileInfo.IsDirectory)
+                {
+                    foreach (var file in GetAllFiles(filePath, syncTarget))
                     {
-                        File.Delete(targetFileFull);
-                        Console.WriteLine($"Couldn't delete {targetFileFull} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
+                        yield return file;
                     }
+                }
+                else
+                {
+                    yield return (filePath, fileInfo);
                 }
             }
         }
 
-        private void DeleteEmptySubdirectories(string parentDirectory, CancellationToken cancellationToken)
+        private void DeleteEmptySubdirectories(string path, ISyncTarget syncTarget, CancellationToken cancellationToken)
         {
-            foreach (string directory in Directory.GetDirectories(parentDirectory))
+            foreach (var item in syncTarget.GetDirectoryContents(path))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                DeleteEmptySubdirectories(directory, cancellationToken);
-                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                if (!item.IsDirectory)
+                    continue;
+
+                string subDir = Path.Join(path, item.Name);
+                DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
+                if (!syncTarget.GetDirectoryContents(subDir).Any())
                 {
-                    Console.WriteLine($"Delete {directory}");
-                    Directory.Delete(directory, false);
+                    Console.WriteLine($"Delete {subDir}");
+                    syncTarget.Delete(item, cancellationToken);
                 }
             }
         }

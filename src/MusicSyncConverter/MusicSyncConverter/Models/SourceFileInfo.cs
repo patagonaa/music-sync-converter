@@ -7,6 +7,6 @@ namespace MusicSyncConverter.Models
     {
         public IFileProvider FileProvider { get; set; }
         public string RelativePath { get; internal set; } // Audio/Music/Test.mp3
-        public DateTime ModifiedDate { get; internal set; }
+        public DateTimeOffset ModifiedDate { get; internal set; }
     }
 }

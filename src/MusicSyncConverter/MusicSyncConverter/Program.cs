@@ -15,7 +15,7 @@ namespace MusicSyncConverter
         {
             // this is required so Unicode chars work on (Windows) machines where the system locale uses a non-Unicode character set (which is usually the case).
             // there is a system-wide "Beta: Use Unicode UTF-8 for worldwide language support" flag, but it is disabled by default because it still breaks a bunch of stuff.
-            Console.OutputEncoding = Encoding.UTF8; 
+            Console.OutputEncoding = Encoding.UTF8;
 
             if (args.Length < 1)
             {

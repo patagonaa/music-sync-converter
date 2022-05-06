@@ -86,7 +86,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var targetFilePath = Path.Combine(config.TargetDir, _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars));
+            var targetFilePath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars);
             if (hasUnsupportedChars)
                 infoLogMessages.TryAdd($"Unsupported chars in path: {workItem.SourceFileInfo.RelativePath}");
 
@@ -98,8 +98,9 @@ namespace MusicSyncConverter
                     SourceFileInfo = workItem.SourceFileInfo,
                     SourceTempFilePath = workItem.SourceTempFilePath,
                     TargetFilePath = targetFilePath,
-                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat.CoverCodec),
-                    Tags = tags
+                    EncoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat),
+                    Tags = tags,
+                    AlbumArtPath = workItem.AlbumArtPath
                 };
             }
 
@@ -110,11 +111,12 @@ namespace MusicSyncConverter
                 SourceTempFilePath = workItem.SourceTempFilePath,
                 TargetFilePath = Path.ChangeExtension(targetFilePath, config.DeviceConfig.FallbackFormat.Extension),
                 EncoderInfo = config.DeviceConfig.FallbackFormat,
-                Tags = tags
+                Tags = tags,
+                AlbumArtPath = workItem.AlbumArtPath
             };
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, string coverCodec)
+        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, EncoderInfo fallbackFormat)
         {
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
@@ -126,7 +128,8 @@ namespace MusicSyncConverter
                         Codec = "copy",
                         Muxer = "ipod",
                         AdditionalFlags = "-movflags faststart",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".aac":
@@ -142,7 +145,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "asf",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".ogg":
@@ -151,7 +155,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "ogg",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".mp3":
@@ -159,7 +164,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "mp3",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".flac":
@@ -167,7 +173,8 @@ namespace MusicSyncConverter
                     {
                         Codec = "copy",
                         Muxer = "flac",
-                        CoverCodec = coverCodec,
+                        CoverCodec = fallbackFormat.CoverCodec,
+                        MaxCoverSize = fallbackFormat.MaxCoverSize,
                         Extension = sourceExtension
                     };
                 case ".wav":

@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MusicSyncConverter", "Music
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MusicSyncConverter.UnitTests", "MusicSyncConverter.UnitTests\MusicSyncConverter.UnitTests.csproj", "{4FAC5B38-944D-4B72-8DBA-130A24BF99BE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MusicSyncConverter.FileProviders", "MusicSyncConverter.FileProviders\MusicSyncConverter.FileProviders.csproj", "{4EF5F166-6A2E-4432-A709-1B8CECE7B981}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{4FAC5B38-944D-4B72-8DBA-130A24BF99BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4FAC5B38-944D-4B72-8DBA-130A24BF99BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4FAC5B38-944D-4B72-8DBA-130A24BF99BE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4EF5F166-6A2E-4432-A709-1B8CECE7B981}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4EF5F166-6A2E-4432-A709-1B8CECE7B981}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4EF5F166-6A2E-4432-A709-1B8CECE7B981}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4EF5F166-6A2E-4432-A709-1B8CECE7B981}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
