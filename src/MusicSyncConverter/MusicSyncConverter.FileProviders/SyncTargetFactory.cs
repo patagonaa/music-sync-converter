@@ -23,10 +23,14 @@ namespace MusicSyncConverter.FileProviders
                         var sortMode = (pathQuerySplit.Length == 2) && Enum.TryParse<FatSortMode>(HttpUtility.ParseQueryString(pathQuerySplit[1])["fatSortMode"], out var sortModeTmp)
                             ? sortModeTmp
                             : FatSortMode.None;
-                        return new PhysicalSyncTarget(pathQuerySplit[0], sortMode);
+                        var path = pathQuerySplit[0];
+                        Directory.CreateDirectory(path);
+                        return new PhysicalSyncTarget(path, sortMode);
                     }
                 case "wpd":
                     {
+                        if(Environment.OSVersion.Platform != PlatformID.Win32NT)
+                            throw new PlatformNotSupportedException("_Windows_ Portable Devices is not supported on non-Windows systems.");
                         var wpdPath = uriString.Replace("wpd://", "");
                         var pathParts = wpdPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 

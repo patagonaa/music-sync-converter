@@ -55,7 +55,6 @@ namespace MusicSyncConverter.FileProviders.Physical
 
         private bool IsCaseSensitiveInternal(string path)
         {
-            Directory.CreateDirectory(path);
             var path1 = Path.Combine(path, "test.tmp");
             var path2 = Path.Combine(path, "TEST.tmp");
             File.Delete(path1);
