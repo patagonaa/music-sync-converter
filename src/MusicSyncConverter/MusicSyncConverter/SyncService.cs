@@ -76,8 +76,8 @@ namespace MusicSyncConverter
                 var targetCaseSensitive = syncTarget.IsCaseSensitive();
                 var pathComparer = new PathComparer(targetCaseSensitive);
 
-                var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(config, pathComparer, syncTarget, x) }.Where(y => y != null), readOptions);
-                var readBlock = new TransformBlock<ReadWorkItem, ConvertWorkItem>(async x => await Read(x, config, infoLogMessages, cancellationToken), readOptions);
+                var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(x, config, pathComparer, syncTarget, infoLogMessages) }.Where(y => y != null), readOptions);
+                var readBlock = new TransformBlock<ReadWorkItem, ConvertWorkItem>(async x => await Read(x, cancellationToken), readOptions);
                 var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, config, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
                 var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
@@ -182,56 +182,37 @@ namespace MusicSyncConverter
             }
         }
 
-        private ReadWorkItem CompareDates(SyncConfig config, PathComparer pathComparer, ISyncTarget syncTarget, SourceFileInfo sourceFile)
+        private ReadWorkItem CompareDates(SourceFileInfo sourceFile, SyncConfig config, PathComparer pathComparer, ISyncTarget syncTarget, IProducerConsumerCollection<string> infoLogMessages)
         {
-            try
+            var relativeTargetPath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true, out var hasUnsupportedChars);
+            if (hasUnsupportedChars)
+                infoLogMessages.TryAdd($"Unsupported chars in path: {sourceFile.RelativePath}");
+
+            string targetDirPath = Path.GetDirectoryName(relativeTargetPath);
+
+            var files = syncTarget.GetDirectoryContents(targetDirPath);
+
+            var targetInfos = files.Exists ? files.Where(x => pathComparer.Equals(Path.GetFileNameWithoutExtension(relativeTargetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
+
+            if (targetInfos.Length == 1 && FileDatesEqual(sourceFile.ModifiedDate, targetInfos[0].LastModified))
             {
-                var relativeTargetPath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, sourceFile.RelativePath, true, out _);
-                string targetDirPath = Path.GetDirectoryName(relativeTargetPath);
-
-                var files = syncTarget.GetDirectoryContents(targetDirPath);
-
-                var targetInfos = files.Exists ? files.Where(x => pathComparer.Equals(Path.GetFileNameWithoutExtension(relativeTargetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
-
-                if (targetInfos.Length != 1) // zero or multiple target files
-                {
-                    //TODO
-                    //// if there are multiple target files, delete them
-                    //foreach (var targetInfo in targetInfos)
-                    //{
-                    //    Console.WriteLine($"Deleting ambiguous file {targetInfo.FullName}");
-                    //    targetInfo.Delete();
-                    //}
-                    return new ReadWorkItem
-                    {
-                        ActionType = CompareResultType.Replace,
-                        SourceFileInfo = sourceFile
-                    };
-                }
-
                 // only one target item, so check if it is up to date
-                var targetDate = targetInfos[0].LastModified;
-                if (FileDatesEqual(sourceFile.ModifiedDate, targetDate))
+                return new ReadWorkItem
                 {
-                    return new ReadWorkItem
-                    {
-                        ActionType = CompareResultType.Keep,
-                        SourceFileInfo = sourceFile,
-                        ExistingTargetFile = Path.Join(targetDirPath, targetInfos[0].Name)
-                    };
-                }
-                else
-                {
-                    return new ReadWorkItem
-                    {
-                        ActionType = CompareResultType.Replace,
-                        SourceFileInfo = sourceFile
-                    };
-                }
+                    ActionType = CompareResultType.Keep,
+                    SourceFileInfo = sourceFile,
+                    TargetFilePath = Path.Join(targetDirPath, targetInfos[0].Name)
+                };
             }
-            catch (Exception)
+            else
             {
-                throw;
+                // zero or multiple target files, so just replace it
+                return new ReadWorkItem
+                {
+                    ActionType = CompareResultType.Replace,
+                    SourceFileInfo = sourceFile,
+                    TargetFilePath = relativeTargetPath
+                };
             }
         }
 
@@ -249,7 +230,7 @@ namespace MusicSyncConverter
             return (dateTime - dateTime1).Duration() <= _fileTimestampDelta;
         }
 
-        private async Task<ConvertWorkItem> Read(ReadWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        private async Task<ConvertWorkItem> Read(ReadWorkItem workItem, CancellationToken cancellationToken)
         {
             ConvertWorkItem toReturn;
             switch (workItem.ActionType)
@@ -259,7 +240,7 @@ namespace MusicSyncConverter
                     {
                         ActionType = ConvertActionType.Keep,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        TargetFilePath = workItem.ExistingTargetFile
+                        TargetFilePath = workItem.TargetFilePath
                     };
                     break;
                 case CompareResultType.Replace:
@@ -273,38 +254,14 @@ namespace MusicSyncConverter
                         tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
                     }
 
-                    var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
-                    string albumCoverPath = null;
-                    foreach (var coverVariant in coverVariants)
-                    {
-                        var coverFileInfo = fileProvider.GetFileInfo(Path.Join(Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath), coverVariant));
-                        if (coverFileInfo.Exists)
-                        {
-                            if (coverFileInfo.PhysicalPath != null)
-                            {
-                                albumCoverPath = coverFileInfo.PhysicalPath;
-                            }
-                            else
-                            {
-                                using (var coverStream = coverFileInfo.CreateReadStream())
-                                {
-                                    albumCoverPath = await TempFileHelper.CopyToTempFile(coverStream, cancellationToken);
-                                }
-                            }
-                            break;
-                        }
-                    }
-
-                    var targetFilePath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars);
-                    if (hasUnsupportedChars)
-                        infoLogMessages.TryAdd($"Unsupported chars in path: {workItem.SourceFileInfo.RelativePath}");
+                    string albumCoverPath = await GetAlbumCoverPath(Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath), fileProvider, cancellationToken);
 
                     toReturn = new ConvertWorkItem
                     {
                         ActionType = ConvertActionType.RemuxOrConvert,
                         SourceFileInfo = workItem.SourceFileInfo,
                         SourceTempFilePath = tmpFilePath,
-                        TargetFilePath = targetFilePath,
+                        TargetFilePath = workItem.TargetFilePath,
                         AlbumArtPath = albumCoverPath
                     };
                     Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
@@ -313,6 +270,31 @@ namespace MusicSyncConverter
                     throw new ArgumentException("Invalid ReadActionType");
             }
             return toReturn;
+        }
+
+        private static async Task<string> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
+        {
+            var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
+            foreach (var coverVariant in coverVariants)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var coverFileInfo = fileProvider.GetFileInfo(Path.Join(dirPath, coverVariant));
+                if (coverFileInfo.Exists)
+                {
+                    if (coverFileInfo.PhysicalPath != null)
+                    {
+                        return coverFileInfo.PhysicalPath;
+                    }
+                    else
+                    {
+                        using (var coverStream = coverFileInfo.CreateReadStream())
+                        {
+                            return await TempFileHelper.CopyToTempFile(coverStream, cancellationToken);
+                        }
+                    }
+                }
+            }
+            return null;
         }
 
         public async Task<OutputFile> Convert(ConvertWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
