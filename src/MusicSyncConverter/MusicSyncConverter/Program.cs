@@ -33,21 +33,6 @@ namespace MusicSyncConverter
 
             var config = configRoot.Get<SyncConfig>();
 
-            if (config.SourceExtensions == null || config.SourceExtensions.Count == 0)
-            {
-                config.SourceExtensions = new List<string>
-                    {
-                        ".mp3",
-                        ".ogg",
-                        ".m4a",
-                        ".flac",
-                        ".opus",
-                        ".wma",
-                        ".wav",
-                        ".aac"
-                    };
-            }
-
             var cts = new CancellationTokenSource();
 
             Console.CancelKeyPress += (o, e) => { cts.Cancel(); e.Cancel = true; };

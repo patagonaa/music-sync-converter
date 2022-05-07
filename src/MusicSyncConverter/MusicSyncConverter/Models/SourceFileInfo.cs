@@ -5,8 +5,8 @@ namespace MusicSyncConverter.Models
 {
     public class SourceFileInfo
     {
-        public IFileProvider FileProvider { get; set; }
-        public string RelativePath { get; internal set; } // Audio/Music/Test.mp3
-        public DateTimeOffset ModifiedDate { get; internal set; }
+        public IFileProvider FileProvider { get; set; } = null!;
+        public string RelativePath { get; set; } = null!; // Audio/Music/Test.mp3
+        public DateTimeOffset ModifiedDate { get; set; }
     }
 }

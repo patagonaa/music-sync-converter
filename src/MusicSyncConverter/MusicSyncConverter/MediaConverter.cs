@@ -35,7 +35,7 @@ namespace MusicSyncConverter
             "comment"
         };
 
-        public async Task<OutputFile> RemuxOrConvert(SyncConfig config, ConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        public async Task<OutputFile?> RemuxOrConvert(SyncConfig config, ConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
             var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 
@@ -160,7 +160,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, string relativePath, CharacterLimitations characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
+        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, string relativePath, CharacterLimitations? characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
         {
             var toReturn = new Dictionary<string, string>();
             foreach (var tag in mediaAnalysis.Format.Tags ?? new Dictionary<string, string>())
@@ -173,7 +173,7 @@ namespace MusicSyncConverter
                 if (hasUnsupportedChars)
                     infoLogMessages.TryAdd(GetUnsupportedStringsMessage(relativePath, tag.Value));
             }
-            foreach (var tag in mediaAnalysis.PrimaryAudioStream.Tags ?? new Dictionary<string, string>())
+            foreach (var tag in mediaAnalysis.PrimaryAudioStream?.Tags ?? new Dictionary<string, string>())
             {
                 if (!_supportedTags.Contains(tag.Key, StringComparer.OrdinalIgnoreCase))
                 {
@@ -208,7 +208,7 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<string> Convert(string sourcePath, string coverPath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
+        private async Task<string> Convert(string sourcePath, string? coverPath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
         {
             var outFilePath = TempFileHelper.GetTempFilePath();
             var args = FFMpegArguments
@@ -216,7 +216,7 @@ namespace MusicSyncConverter
             var hasExternalCover = encoderInfo.CoverCodec != null && coverPath != null;
             if (hasExternalCover)
             {
-                args.AddFileInput(coverPath);
+                args.AddFileInput(coverPath!);
             }
 
             var argsProcessor = args.OutputToFile(outFilePath, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams

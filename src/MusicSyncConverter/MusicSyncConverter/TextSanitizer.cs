@@ -9,7 +9,7 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer
     {
-        public string SanitizeText(CharacterLimitations config, string text, bool isPath, out bool hasUnsupportedChars)
+        public string SanitizeText(CharacterLimitations? config, string text, bool isPath, out bool hasUnsupportedChars)
         {
             if (config == null)
             {
@@ -57,7 +57,7 @@ namespace MusicSyncConverter
                 var replacement = config.Replacements?.FirstOrDefault(x => x.Char == inChar);
                 if (replacement != null)
                 {
-                    toInsert = replacement.Replacement;
+                    toInsert = replacement.Replacement ?? string.Empty;
                 }
                 else
                 {

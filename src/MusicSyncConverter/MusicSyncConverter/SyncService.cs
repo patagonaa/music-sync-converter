@@ -43,24 +43,24 @@ namespace MusicSyncConverter
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = config.WorkersRead,
-                MaxDegreeOfParallelism = config.WorkersRead,
+                BoundedCapacity = config.WorkersRead ?? 1,
+                MaxDegreeOfParallelism = config.WorkersRead ?? 1,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
             };
 
             var workerOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = config.WorkersConvert,
-                MaxDegreeOfParallelism = config.WorkersConvert,
+                BoundedCapacity = config.WorkersConvert ?? Environment.ProcessorCount,
+                MaxDegreeOfParallelism = config.WorkersConvert ?? Environment.ProcessorCount,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
             };
 
             var writeOptions = new ExecutionDataflowBlockOptions
             {
-                BoundedCapacity = config.WorkersWrite,
-                MaxDegreeOfParallelism = config.WorkersWrite,
+                BoundedCapacity = config.WorkersWrite ?? 1,
+                MaxDegreeOfParallelism = config.WorkersWrite ?? 1,
                 EnsureOrdered = false,
                 CancellationToken = cancellationToken
             };
@@ -78,7 +78,7 @@ namespace MusicSyncConverter
 
                 var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(x, config, pathComparer, syncTarget, infoLogMessages) }.Where(y => y != null), readOptions);
                 var readBlock = new TransformBlock<ReadWorkItem, ConvertWorkItem>(async x => await Read(x, cancellationToken), readOptions);
-                var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, config, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
+                var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, config, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null)!, workerOptions);
                 var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                 compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -188,7 +188,7 @@ namespace MusicSyncConverter
             if (hasUnsupportedChars)
                 infoLogMessages.TryAdd($"Unsupported chars in path: {sourceFile.RelativePath}");
 
-            string targetDirPath = Path.GetDirectoryName(relativeTargetPath);
+            string targetDirPath = Path.GetDirectoryName(relativeTargetPath) ?? throw new ArgumentException("DirectoryName is null");
 
             var files = syncTarget.GetDirectoryContents(targetDirPath);
 
@@ -254,7 +254,8 @@ namespace MusicSyncConverter
                         tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
                     }
 
-                    string albumCoverPath = await GetAlbumCoverPath(Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath), fileProvider, cancellationToken);
+                    string directoryPath = Path.GetDirectoryName(workItem.SourceFileInfo.RelativePath) ?? throw new ArgumentException("DirectoryName is null");
+                    string? albumCoverPath = await GetAlbumCoverPath(directoryPath, fileProvider, cancellationToken);
 
                     toReturn = new ConvertWorkItem
                     {
@@ -272,7 +273,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private static async Task<string> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
+        private static async Task<string?> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
             var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
             foreach (var coverVariant in coverVariants)
@@ -297,7 +298,7 @@ namespace MusicSyncConverter
             return null;
         }
 
-        public async Task<OutputFile> Convert(ConvertWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
+        public async Task<OutputFile?> Convert(ConvertWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
@@ -311,7 +312,8 @@ namespace MusicSyncConverter
                             var sw = Stopwatch.StartNew();
                             Console.WriteLine($"--> Convert {workItem.SourceFileInfo.RelativePath}");
                             var outFile = await _converter.RemuxOrConvert(config, workItem, infoLogMessages, cancellationToken);
-                            handledFiles.Add(outFile.Path);
+                            if (outFile != null)
+                                handledFiles.Add(outFile.Path);
                             sw.Stop();
                             Console.WriteLine($"<-- Convert {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.RelativePath}");
                             return outFile;
