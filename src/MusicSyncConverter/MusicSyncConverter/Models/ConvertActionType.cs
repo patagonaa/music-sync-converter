@@ -1,8 +1,8 @@
 ﻿namespace MusicSyncConverter.Models
 {
-    public enum AnalyzeActionType
+    public enum ConvertActionType
     {
         Keep,
-        CopyOrConvert
+        RemuxOrConvert
     }
 }

@@ -20,7 +20,6 @@ namespace MusicSyncConverter
         private readonly FileProviderFactory _fileProviderFactory;
         private readonly SyncTargetFactory _syncTargetFactory;
         private readonly TextSanitizer _sanitizer;
-        private readonly MediaAnalyzer _analyzer;
         private readonly MediaConverter _converter;
         private readonly PathMatcher _pathMatcher;
 
@@ -31,15 +30,14 @@ namespace MusicSyncConverter
             _fileProviderFactory = new FileProviderFactory();
             _syncTargetFactory = new SyncTargetFactory();
             _sanitizer = new TextSanitizer();
-            _analyzer = new MediaAnalyzer(_sanitizer);
             _converter = new MediaConverter();
             _pathMatcher = new PathMatcher();
         }
 
         public async Task Run(SyncConfig config, CancellationToken upstreamCancellationToken)
         {
-            using var cancallationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(upstreamCancellationToken);
-            var cancellationToken = cancallationTokenSource.Token;
+            using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(upstreamCancellationToken);
+            var cancellationToken = cancellationTokenSource.Token;
             CleanupTempDir(cancellationToken);
 
             //set up pipeline
@@ -79,14 +77,12 @@ namespace MusicSyncConverter
                 var pathComparer = new PathComparer(targetCaseSensitive);
 
                 var compareBlock = new TransformManyBlock<SourceFileInfo, ReadWorkItem>(x => new[] { CompareDates(config, pathComparer, syncTarget, x) }.Where(y => y != null), readOptions);
-                var readBlock = new TransformBlock<ReadWorkItem, AnalyzeWorkItem>(async x => await Read(x, cancellationToken), readOptions);
-                var analyzeBlock = new TransformManyBlock<AnalyzeWorkItem, ConvertWorkItem>(async x => new[] { await _analyzer.Analyze(config, x, infoLogMessages) }.Where(y => y != null), workerOptions);
-                var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
+                var readBlock = new TransformBlock<ReadWorkItem, ConvertWorkItem>(async x => await Read(x, config, infoLogMessages, cancellationToken), readOptions);
+                var convertBlock = new TransformManyBlock<ConvertWorkItem, OutputFile>(async x => new[] { await Convert(x, config, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null), workerOptions);
                 var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                 compareBlock.LinkTo(readBlock, new DataflowLinkOptions { PropagateCompletion = true });
-                readBlock.LinkTo(analyzeBlock, new DataflowLinkOptions { PropagateCompletion = true });
-                analyzeBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
+                readBlock.LinkTo(convertBlock, new DataflowLinkOptions { PropagateCompletion = true });
                 convertBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                 var fileProvider = _fileProviderFactory.Get(config.SourceDir);
@@ -104,7 +100,7 @@ namespace MusicSyncConverter
                     {
                         // cancel everything as faults only get propagated to the blocks after the fault
                         // and we need all blocks to stop so we can exit the application
-                        cancallationTokenSource.Cancel();
+                        cancellationTokenSource.Cancel();
                         throw;
                     }
                 }
@@ -253,17 +249,17 @@ namespace MusicSyncConverter
             return (dateTime - dateTime1).Duration() <= _fileTimestampDelta;
         }
 
-        private async Task<AnalyzeWorkItem> Read(ReadWorkItem workItem, CancellationToken cancellationToken)
+        private async Task<ConvertWorkItem> Read(ReadWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
-            AnalyzeWorkItem toReturn;
+            ConvertWorkItem toReturn;
             switch (workItem.ActionType)
             {
                 case CompareResultType.Keep:
-                    toReturn = new AnalyzeWorkItem
+                    toReturn = new ConvertWorkItem
                     {
-                        ActionType = AnalyzeActionType.Keep,
+                        ActionType = ConvertActionType.Keep,
                         SourceFileInfo = workItem.SourceFileInfo,
-                        ExistingTargetFile = workItem.ExistingTargetFile
+                        TargetFilePath = workItem.ExistingTargetFile
                     };
                     break;
                 case CompareResultType.Replace:
@@ -299,11 +295,16 @@ namespace MusicSyncConverter
                         }
                     }
 
-                    toReturn = new AnalyzeWorkItem
+                    var targetFilePath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, workItem.SourceFileInfo.RelativePath, true, out var hasUnsupportedChars);
+                    if (hasUnsupportedChars)
+                        infoLogMessages.TryAdd($"Unsupported chars in path: {workItem.SourceFileInfo.RelativePath}");
+
+                    toReturn = new ConvertWorkItem
                     {
-                        ActionType = AnalyzeActionType.CopyOrConvert,
+                        ActionType = ConvertActionType.RemuxOrConvert,
                         SourceFileInfo = workItem.SourceFileInfo,
                         SourceTempFilePath = tmpFilePath,
+                        TargetFilePath = targetFilePath,
                         AlbumArtPath = albumCoverPath
                     };
                     Console.WriteLine($"<-- Read {workItem.SourceFileInfo.RelativePath}");
@@ -314,41 +315,28 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        public async Task<OutputFile> Convert(ConvertWorkItem workItem, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
+        public async Task<OutputFile> Convert(ConvertWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<string> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
-                OutputFile toReturn = null;
                 switch (workItem.ActionType)
                 {
                     case ConvertActionType.Keep:
                         handledFiles.Add(workItem.TargetFilePath);
                         return null;
-                    case ConvertActionType.Transcode:
-                    case ConvertActionType.Remux:
+                    case ConvertActionType.RemuxOrConvert:
                         {
                             var sw = Stopwatch.StartNew();
-                            Console.WriteLine($"--> {workItem.ActionType} {workItem.SourceFileInfo.RelativePath}");
-                            var sourcePath = workItem.SourceTempFilePath;
-                            var outputFormat = workItem.EncoderInfo;
-
-                            var outPath = await _converter.Convert(sourcePath, workItem.AlbumArtPath, outputFormat, workItem.Tags, cancellationToken);
-
-                            handledFiles.Add(workItem.TargetFilePath);
-                            toReturn = new OutputFile
-                            {
-                                Path = workItem.TargetFilePath,
-                                ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                                TempFilePath = outPath
-                            };
+                            Console.WriteLine($"--> Convert {workItem.SourceFileInfo.RelativePath}");
+                            var outFile = await _converter.RemuxOrConvert(config, workItem, infoLogMessages, cancellationToken);
+                            handledFiles.Add(outFile.Path);
                             sw.Stop();
-                            Console.WriteLine($"<-- {workItem.ActionType} {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.RelativePath}");
-                            break;
+                            Console.WriteLine($"<-- Convert {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.RelativePath}");
+                            return outFile;
                         }
                     default:
-                        break;
+                        throw new ArgumentException("Invalid ConvertActionType");
                 }
-                return toReturn;
             }
             catch (Exception ex)
             {
