@@ -35,7 +35,7 @@ namespace MusicSyncConverter
             "comment"
         };
 
-        public async Task<OutputFile?> RemuxOrConvert(SyncConfig config, ConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        public async Task<OutputFile?> RemuxOrConvert(SyncConfig config, SongConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
             var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
 

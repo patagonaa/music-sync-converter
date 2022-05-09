@@ -1,6 +1,6 @@
 ﻿namespace MusicSyncConverter.Models
 {
-    public class ReadWorkItem
+    public class SongReadWorkItem
     {
         public CompareResultType ActionType { get; set; }
         public SourceFileInfo SourceFileInfo { get; set; } = null!;

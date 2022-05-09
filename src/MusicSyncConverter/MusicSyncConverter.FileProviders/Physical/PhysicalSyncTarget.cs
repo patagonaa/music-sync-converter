@@ -28,9 +28,9 @@ namespace MusicSyncConverter.FileProviders.Physical
             _fatSorter = new FatSorter();
         }
 
-        public async Task WriteFile(string relativePath, Stream content, DateTimeOffset modified, CancellationToken cancellationToken)
+        public async Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
-            var absolutePath = Path.Join(_basePath, relativePath);
+            var absolutePath = Path.Join(_basePath, path);
 
             var dirInfo = new DirectoryInfo(Path.GetDirectoryName(absolutePath));
             _updatedDirectories.Add(dirInfo.FullName);
@@ -48,7 +48,8 @@ namespace MusicSyncConverter.FileProviders.Physical
                 await content.CopyToAsync(outputFile, cancellationToken);
             }
 
-            File.SetLastWriteTime(absolutePath, modified.LocalDateTime);
+            if (modified.HasValue)
+                File.SetLastWriteTime(absolutePath, modified.Value.LocalDateTime);
         }
 
         public bool IsCaseSensitive() => _isCaseSensitive;
