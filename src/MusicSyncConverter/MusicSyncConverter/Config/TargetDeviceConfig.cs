@@ -8,6 +8,6 @@ namespace MusicSyncConverter.Config
         public IList<DeviceFileFormat> SupportedFormats { get; set; } = null!;
         public EncoderInfo FallbackFormat { get; set; } = null!;
         public CharacterLimitations? CharacterLimitations { get; set; }
-        public bool ResolvePlaylists { get; set; } = true;
+        public bool ResolvePlaylists { get; set; } = false;
     }
 }
