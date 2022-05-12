@@ -74,6 +74,7 @@
                     "Replacement": "1/2"
                 }
             ]
-        }
+        },
+        "ResolvePlaylists": true
     }
 }

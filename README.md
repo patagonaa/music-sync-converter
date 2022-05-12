@@ -15,6 +15,25 @@ Instead of just syncing from directory to directory you can use some different f
 - (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices) : `wpd://` (for example `wpd://My Android Phone/disk/Music`)
     - Don't expect this to be rock-solid. It's MTP, what do you expect?
 
+### Playlists
+There are two ways to handle `m3u` / `m3u8` playlists:
+#### ResolvePlaylists false (default)
+Each playlist is copied to the target directory. All references are updated to point to the correct file if required (e.g. if the file extension changes due to a format conversion).
+
+All songs referenced by the playlist should be included in the sync task or the songs will be excluded from the playlist and a warning will be logged.
+
+#### ResolvePlaylists true
+Each playlist is created as a directory containing the referenced songs.
+The `EXTINF` name is used as a file name if available (else the source file name is used).
+so the playlist `Playlists/Test.m3u8`
+with the contents
+```m3u
+#EXTM3U
+#EXTINF:253,An Artist - Song 4
+..\Artists\An Artist\An Album\04 Song 4.flac
+```
+results in the directory `Playlists/Test/` with the file `An Artist - Song 4.flac`
+
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
 - Copy/Remux all MP3, WMA and AAC-LC files
@@ -23,6 +42,7 @@ Instead of just syncing from directory to directory you can use some different f
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (only `*` and `**` are supported)
 - Change every first character of file/dir names to uppercase so things that sort case-sensitive work properly
+- Resolve playlists to directories
 - Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 
 ```js
@@ -90,7 +110,8 @@ Instead of just syncing from directory to directory you can use some different f
                 }
             ],
             "NormalizeCase": true // change every first character of file/dir names to uppercase
-        }
+        },
+        "ResolvePlaylists": true // convert playlists to directories with the respective files
     },
     "SourceDir": "file://Z:\\Audio\\",
     "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)

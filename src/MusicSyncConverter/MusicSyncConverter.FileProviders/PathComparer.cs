@@ -17,12 +17,31 @@ namespace MusicSyncConverter.FileProviders
 
         public bool Equals(string? x, string? y)
         {
-            if (_multipleSeparators)
+            return _internalComparer.Equals(NormalizePath(x), NormalizePath(y));
+        }
+
+        private string? NormalizePath(string? path)
+        {
+            if(path == null)
+                return null;
+            var pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var stack = new Stack<string>();
+            foreach (var part in pathParts)
             {
-                x = x?.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-                y = y?.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+                if (part == "..")
+                {
+                    stack.Pop();
+                }
+                else if (part == ".")
+                {
+                    continue;
+                }
+                else
+                {
+                    stack.Push(part);
+                }
             }
-            return _internalComparer.Equals(x, y);
+            return string.Join(Path.DirectorySeparatorChar, stack);
         }
 
         public int GetHashCode(string? obj)

@@ -47,7 +47,8 @@
             "Bitrate": 128,
             "CoverCodec": "mjpeg",
             "MaxCoverSize": 512,
-            "Channels":  2
-        }
+            "Channels": 2
+        },
+        "ResolvePlaylists": false
     }
 }

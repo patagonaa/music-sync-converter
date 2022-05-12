@@ -110,6 +110,7 @@
                 }
             ],
             "NormalizeCase": true
-        }
+        },
+        "ResolvePlaylists": true
     }
 }

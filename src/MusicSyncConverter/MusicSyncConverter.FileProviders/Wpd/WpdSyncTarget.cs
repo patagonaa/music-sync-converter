@@ -75,13 +75,13 @@ namespace MusicSyncConverter.FileProviders.Wpd
             return false; // TODO do we even care?
         }
 
-        public Task WriteFile(string subPath, Stream content, DateTimeOffset modified, CancellationToken cancellationToken)
+        public Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
             lock (_syncLock)
             {
                 var sw = Stopwatch.StartNew();
-                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(subPath));
-                var fileName = Path.GetFileName(subPath);
+                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(path));
+                var fileName = Path.GetFileName(path);
                 Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds+"ms");
                 sw.Restart();
 
@@ -102,7 +102,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 properties.SetGuidValue(WPD_OBJECT_CONTENT_TYPE, WPD_CONTENT_TYPE_GENERIC_FILE);
                 properties.SetStringValue(WPD_OBJECT_ORIGINAL_FILE_NAME, fileName);
                 properties.SetStringValue(WPD_OBJECT_NAME, fileName);
-                properties.SetValue(WPD_OBJECT_DATE_MODIFIED, new PROPVARIANT(modified.LocalDateTime));
+                if (modified.HasValue)
+                    properties.SetValue(WPD_OBJECT_DATE_MODIFIED, new PROPVARIANT(modified.Value.LocalDateTime));
 
                 uint bufferSize = 0;
                 _content.CreateObjectWithPropertiesAndData(properties, out IStream stream, ref bufferSize);
