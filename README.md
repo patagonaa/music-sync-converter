@@ -1,11 +1,25 @@
 # music-sync-converter
-Sync music to MP3 players, phones, flash drives for car radios and such. Detect and convert unsupported files by extension, codec and profile automatically.
+Sync music to MP3 players, phones, flash drives for car radios and such. Detect and convert unsupported files automatically.
 Works on Windows and Linux, macOS is untested.
+
+## Features
+- sync only files that have been added/removed/changed
+- works with any directory structure (does not force you into a certain way of managing your music library)
+- use a local directory or WebDAV (e.g. Nextcloud) as a source
+- exclude files/directories
+- use a local directory or MTP (Windows-only) as a target
+- convert unsupported files on-the-fly using FFMPEG (by extension, container, codec, profile, ...)
+- fast conversion due to pipelining and multithreading
+- automatically embed album art from the directory into the file
+- replace unsupported characters in the path
+- handle m3u playlists by adjusting the file path or resolving the playlist to a directory with the playlist's songs
+- order the FAT32 file table (for embedded devices that don't sort directories before playing)
+- normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
 
 ## Usage:
 `.\MusicSyncConverter.exe config.json`
 
-You can also split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
+You can split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
 
 ### Supported sources / targets
 Instead of just syncing from directory to directory you can use some different file providers (or even write your own):
@@ -17,6 +31,15 @@ Instead of just syncing from directory to directory you can use some different f
     - supports the query parameter `?fatSortMode=<mode>` where `<mode>` is `None`, `Folders`, `Files`, `FilesAndFolders` to sort the FAT32 table when directories change. This is useful for devices that don't sort files or directory by name.
 - (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices) : `wpd://` (for example `wpd://My Android Phone/disk/Music`)
     - Don't expect this to be rock-solid. It's MTP, what do you expect?
+
+### Excludes
+You can exclude files by adding directories to the `Exclude` array in the config file.
+Wildcards `*` (any directory) and `**` (any directory structure) are supported
+Examples: 
+- `Audio Books` ignores `Audio Books/` in the root folder
+- `Music/**/Instrumentals` ignores `Music/Example Artist/Instrumentals` and `Music/Albums/Example Artist/Instrumentals`
+- `Music/*/Instrumentals` ignores `Music/Example Artist/Instrumentals` but not `Music/Albums/Example Artist/Instrumentals`
+- `Music/Albums/**/*.m3u` ignores `Music/Artists/Example Artist/playlist.m3u` but not `Music/Playlists/playlist.m3u`
 
 ### Formats
 Format conversion works by analyzing the source file, comparing the format against the configured supported formats and converting to the configured fallback format if necessary
