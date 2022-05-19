@@ -66,6 +66,8 @@ namespace MusicSyncConverter.UnitTests
         [TestCase(false, "Music/B*s/John Doe/Example Album", "Music/Artists/John Doe/Example Album")]
         [TestCase(false, "Music/Artists*/Example Album", "Music/Artists/John Doe/Example Album")]
         [TestCase(false, "Music/*John Doe/Example Album", "Music/Artists/John Doe/Example Album")]
+        [TestCase(true, "Music/**/*.m3u", "Music/Artists/John Doe/Example Album/playlist.m3u")]
+        [TestCase(false, "Music/**/*.m3u", "Music/Artists/John Doe/Example Album/playlist.mp3")]
         public void SinglePartialPathWildcardMatches(bool expected, string glob, string path)
         {
             Assert.AreEqual(expected, _sut.Matches(glob, path, true));
