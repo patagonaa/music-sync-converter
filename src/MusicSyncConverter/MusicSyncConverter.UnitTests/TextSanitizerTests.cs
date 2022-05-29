@@ -48,15 +48,15 @@ namespace MusicSyncConverter.UnitTests
                 NormalizeCase = false,
                 Replacements = new[]
                 {
-                    new CharReplacement{ Char = 'ä', Replacement ="ae" },
-                    new CharReplacement{ Char = 'ö', Replacement ="oe" },
-                    new CharReplacement{ Char = 'ü', Replacement ="ue" },
-                    new CharReplacement{ Char = 'Ä', Replacement ="Ae" },
-                    new CharReplacement{ Char = 'Ö', Replacement ="Oe" },
-                    new CharReplacement{ Char = 'Ü', Replacement ="Ue" },
-                    new CharReplacement{ Char = 'ß', Replacement ="ss" },
-                    new CharReplacement{ Char = '♥', Replacement ="<3" },
-                    new CharReplacement{ Char = '×', Replacement ="x" }
+                    new CharReplacement{ Char = "ä", Replacement ="ae" },
+                    new CharReplacement{ Char = "ö", Replacement ="oe" },
+                    new CharReplacement{ Char = "ü", Replacement ="ue" },
+                    new CharReplacement{ Char = "Ä", Replacement ="Ae" },
+                    new CharReplacement{ Char = "Ö", Replacement ="Oe" },
+                    new CharReplacement{ Char = "Ü", Replacement ="Ue" },
+                    new CharReplacement{ Char = "ß", Replacement ="ss" },
+                    new CharReplacement{ Char = "♥", Replacement ="<3" },
+                    new CharReplacement{ Char = "×", Replacement ="x" }
                 },
                 SupportedChars = null
             };
@@ -64,6 +64,55 @@ namespace MusicSyncConverter.UnitTests
             Assert.AreEqual(expected, result);
         }
 
+        [TestCase("2𝟘𝟙X", "𝟚𝟘𝟙𝕏")]
+        public void Test_Limitations_SurrogateText_Replacements(string expected, string text)
+        {
+            var limitations = new CharacterLimitations
+            {
+                NormalizeCase = false,
+                Replacements = new[]
+                {
+                    new CharReplacement{ Char = "𝟚", Replacement ="2" },
+                    new CharReplacement{ Char = "𝕏", Replacement ="X" },
+                },
+                SupportedChars = null
+            };
+            var result = _sut.SanitizeText(limitations, text, false, out _);
+            Assert.AreEqual(expected, result);
+        }
+
+        [TestCase("201X", "𝟚𝟘𝟙𝕏")]
+        [TestCase("201XABC", "𝟚𝟘𝟙𝕏ABC")]
+        [TestCase("201X²³", "𝟚𝟘𝟙𝕏²³")]
+        public void Test_Limitations_SurrogateText_ReplaceNonBmpChars(string expected, string text)
+        {
+            var limitations = new CharacterLimitations
+            {
+                NormalizeCase = false,
+                Replacements = null,
+                ReplaceNonBmpChars = true,
+                SupportedChars = null
+            };
+            var result = _sut.SanitizeText(limitations, text, false, out _);
+            Assert.AreEqual(expected, result);
+        }
+
+        [Ignore("this is kinda messy to handle so I don't care")]
+        [TestCase("testCombinedEmoji123", "test👨‍👩‍👧‍👦123")]
+        public void Test_Limitations_CombinedEmojiText_Replacements(string expected, string text)
+        {
+            var limitations = new CharacterLimitations
+            {
+                NormalizeCase = false,
+                Replacements = new[]
+                {
+                    new CharReplacement{ Char = "👨‍👩‍👧‍👦", Replacement ="WeirdEmoji" },
+                },
+                SupportedChars = null
+            };
+            var result = _sut.SanitizeText(limitations, text, false, out _);
+            Assert.AreEqual(expected, result);
+        }
 
         [TestCase("Hallo Welt!", "Hallo Welt!")]
         [TestCase("Hallo Welt!", "hallo Welt!")]
@@ -80,16 +129,16 @@ namespace MusicSyncConverter.UnitTests
                 NormalizeCase = true,
                 Replacements = new[]
                 {
-                    new CharReplacement{ Char = 'ä', Replacement ="ae" },
-                    new CharReplacement{ Char = 'ö', Replacement ="oe" },
-                    new CharReplacement{ Char = 'ü', Replacement ="ue" },
-                    new CharReplacement{ Char = 'Ä', Replacement ="Ae" },
-                    new CharReplacement{ Char = 'Ö', Replacement ="Oe" },
-                    new CharReplacement{ Char = 'Ü', Replacement ="Ue" },
-                    new CharReplacement{ Char = 'ß', Replacement ="ss" },
-                    new CharReplacement{ Char = 'ẞ', Replacement ="ss" },
-                    new CharReplacement{ Char = '♥', Replacement ="<3" },
-                    new CharReplacement{ Char = '×', Replacement ="x" }
+                    new CharReplacement{ Char = "ä", Replacement ="ae" },
+                    new CharReplacement{ Char = "ö", Replacement ="oe" },
+                    new CharReplacement{ Char = "ü", Replacement ="ue" },
+                    new CharReplacement{ Char = "Ä", Replacement ="Ae" },
+                    new CharReplacement{ Char = "Ö", Replacement ="Oe" },
+                    new CharReplacement{ Char = "Ü", Replacement ="Ue" },
+                    new CharReplacement{ Char = "ß", Replacement ="ss" },
+                    new CharReplacement{ Char = "ẞ", Replacement ="ss" },
+                    new CharReplacement{ Char = "♥", Replacement ="<3" },
+                    new CharReplacement{ Char = "×", Replacement ="x" }
                 },
                 SupportedChars = null
             };

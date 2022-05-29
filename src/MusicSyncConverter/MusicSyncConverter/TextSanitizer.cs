@@ -51,13 +51,21 @@ namespace MusicSyncConverter
 
             var first = true;
 
-            foreach (var inChar in text)
+            foreach (var inChar in text.EnumerateRunes())
             {
                 string toInsert;
-                var replacement = config.Replacements?.FirstOrDefault(x => x.Char == inChar);
+
+                var replacement = config.Replacements?.FirstOrDefault(x => x.Rune == inChar);
                 if (replacement != null)
                 {
                     toInsert = replacement.Replacement ?? string.Empty;
+                }
+                else if (config.ReplaceNonBmpChars && !inChar.IsBmp)
+                {
+                    toInsert = inChar.ToString().Normalize(NormalizationForm.FormKC);
+                    if (toInsert.Length > 1)
+                        toInsert = "_";
+                    hasUnsupportedChars = true;
                 }
                 else
                 {
@@ -72,7 +80,6 @@ namespace MusicSyncConverter
 
                 foreach (var outChar in toInsert)
                 {
-
                     // if this is a path, replace chars that are invalid for path names
                     if (isForPath && pathUnsupportedChars.Contains(outChar))
                     {

@@ -109,7 +109,8 @@
                     "Replacement": "+"
                 }
             ],
-            "NormalizeCase": true
+            "NormalizeCase": true,
+            "ReplaceNonBmpChars": true
         },
         "ResolvePlaylists": true
     }

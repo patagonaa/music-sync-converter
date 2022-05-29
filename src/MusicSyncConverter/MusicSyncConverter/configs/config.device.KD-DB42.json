@@ -73,7 +73,8 @@
                     "Char": "½",
                     "Replacement": "1/2"
                 }
-            ]
+            ],
+            "ReplaceNonBmpChars": true
         },
         "ResolvePlaylists": true
     }
