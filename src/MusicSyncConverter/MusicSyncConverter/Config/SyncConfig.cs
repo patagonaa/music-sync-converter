@@ -17,6 +17,7 @@ namespace MusicSyncConverter.Config
                 ".aac"
             };
         public TargetDeviceConfig DeviceConfig { get; set; } = null!;
+        public IDictionary<string, FileFormatLimitation>? PathFormatOverrides { get; set; }
         public string SourceDir { get; set; } = null!;
         public string TargetDir { get; set; } = null!;
         public IList<string>? Exclude { get; set; }

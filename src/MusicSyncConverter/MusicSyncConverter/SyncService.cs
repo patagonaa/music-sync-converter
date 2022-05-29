@@ -131,6 +131,9 @@ namespace MusicSyncConverter
                     // wait until every pipeline element is done
                     try
                     {
+                        // if there is a fault during comparison/reading/conversion/writing, cancel all other pipeline elements immediately to avoid freezing
+                        _ = writeBlock.Completion.ContinueWith(x => cancellationTokenSource.Cancel(), TaskContinuationOptions.OnlyOnFaulted);
+
                         await fileRouterBlock.Completion;
                         getSyncInfoBlock.Complete();
                         readPlaylistBlock.Complete();

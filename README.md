@@ -9,6 +9,7 @@ Works on Windows and Linux, macOS is untested.
 - exclude files/directories
 - use a local directory or MTP (Windows-only) as a target
 - convert unsupported files on-the-fly using FFMPEG (by extension, container, codec, profile, ...)
+- override codec settings for certain paths
 - fast conversion due to pipelining and multithreading
 - automatically embed album art from the directory into the file
 - replace unsupported characters in the path
@@ -50,6 +51,7 @@ The supported format includes:
 - `Profile`: Profile as reported by ffprobe, for example `LC` for AAC-LC
 - `MaxChannels`: Max. number of audio channels
 - `MaxSampleRateHz`: Max. sample rate in Hz
+- `MaxBitrate`: Max. bitrate in kbit/s
 
 "as reported by ffprobe" =>
 ```
@@ -112,6 +114,7 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
 - Replace unsupported characters (in directory and file names, and tag values)
 - Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
 - Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (only `*` and `**` are supported)
+- Override codec settings for  `Z:\Audio\Audio Books` so all audio books are converted to 64kbit/s mono (if necessary)
 - Change every first character of file/dir names to uppercase so devices that sort case-sensitive work properly
 - Resolve playlists to directories
 - Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
@@ -200,6 +203,12 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
         "Music\\Artists\\Nickelback",
         "Music\\Artists\\**\\Instrumentals"
     ],
+    "PathFormatOverrides": {
+        "Audio Books/**": {
+            "MaxBitrate": 64,
+            "MaxChannels": 1
+        }
+    },
     "WorkersRead": 8, // max number of threads to use for reading files
     "WorkersConvert": 8, // max number of threads to use for converting files
     "WorkersWrite": 1 // max number of threads to use for writing (for slow devices like HDDs, SD cards or flash drives, 1 is usually best)

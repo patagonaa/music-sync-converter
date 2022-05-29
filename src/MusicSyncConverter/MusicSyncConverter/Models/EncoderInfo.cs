@@ -1,4 +1,6 @@
-﻿namespace MusicSyncConverter.Models
+﻿using System;
+
+namespace MusicSyncConverter.Models
 {
     public class EncoderInfo
     {
@@ -12,5 +14,10 @@
         public int? Bitrate { get; set; }
         public string? CoverCodec { get; set; }
         public int? MaxCoverSize { get; set; }
+
+        public EncoderInfo Clone()
+        {
+            return (EncoderInfo)this.MemberwiseClone();
+        }
     }
 }
