@@ -8,11 +8,14 @@ Works on Windows and Linux, macOS is untested.
 - use a local directory or WebDAV (e.g. Nextcloud) as a source
 - exclude files/directories
 - use a local directory or MTP (Windows-only) as a target
-- convert unsupported files on-the-fly using FFMPEG (by extension, container, codec, profile, ...)
-- override codec settings for certain paths
+- convert unsupported files on-the-fly using FFMPEG
+    - decision by extension, container, codec, profile, ...
+    - override codec settings for certain paths
 - fast conversion due to pipelining and multithreading
 - automatically embed album art from the directory into the file
-- replace unsupported characters in the path
+- handle unsupported characters in path and tags
+    - replace unsupported characters (replacement list)
+    - normalize/replace characters that can't be represented with UCS-2 (outside "BMP encoding range"), like 𝟙𝟚𝟛𝕏 (Android doesn't like those on SD cards)
 - handle m3u playlists by adjusting the file path or resolving the playlist to a directory with the playlist's songs
 - order the FAT32 file table (for embedded devices that don't sort directories before playing)
 - normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
@@ -109,18 +112,27 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
 
 ### Example config:
 - Sync `Z:\Audio` to `E:\Audio`
-- Copy/Remux all MP3, WMA and AAC-LC files
-- Convert all unsupported files (fall back to AAC-LC 192kbit/s)
-- Replace unsupported characters (in directory and file names, and tag values)
-- Convert album covers of unsupported files to jpeg with 320x320 px max (while retaining aspect ratio)
+- Reorder file table on target (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 - Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (only `*` and `**` are supported)
-- Override codec settings for  `Z:\Audio\Audio Books` so all audio books are converted to 64kbit/s mono (if necessary)
+- Copy all MP3, WMA and AAC-LC files
+- Convert all other files to AAC-LC 192kbit/s
+- Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
+- Replace unsupported characters (in directory and file names, and tag values)
+- Replace characters that can't be represented with UCS-2 (required for Android devices)
 - Change every first character of file/dir names to uppercase so devices that sort case-sensitive work properly
 - Resolve playlists to directories
-- Reorder file table (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
+- Override codec settings for  `Z:\Audio\Audio Books` so all audio books are converted to 64kbit/s mono to save storage space
+
 
 ```js
 {
+    "SourceDir": "file://Z:\\Audio\\",
+    "TargetDir": "file://E:\\Audio\\?fatSortMode=Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders", default is "None"
+    "Exclude": [
+        "Webradio",
+        "Music\\Artists\\Nickelback",
+        "Music\\Artists\\**\\Instrumentals"
+    ],
     "DeviceConfig": {
         "SupportedFormats": [
             {
@@ -183,26 +195,11 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
                     "Replacement": "ss"
                 }
             ],
+            "ReplaceNonBmpChars": true, // replace non UCS-2 chars
             "NormalizeCase": true // change every first character of file/dir names to uppercase
         },
         "ResolvePlaylists": true // convert playlists to directories with the respective files
     },
-    "SourceDir": "file://Z:\\Audio\\",
-    "SourceExtensions": [ // file extensions to check (can be omitted, default: mp3, ogg, m4a, flac, opus, wma, wav)
-        ".mp3",
-        ".ogg",
-        ".m4a",
-        ".flac",
-        ".opus",
-        ".wma",
-        ".wav"
-    ],
-    "TargetDir": "file://E:\\Audio\\?fatSortMode=Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders", default is "None"
-    "Exclude": [
-        "Webradio",
-        "Music\\Artists\\Nickelback",
-        "Music\\Artists\\**\\Instrumentals"
-    ],
     "PathFormatOverrides": {
         "Audio Books/**": {
             "MaxBitrate": 64,
