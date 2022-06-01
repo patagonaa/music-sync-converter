@@ -40,7 +40,7 @@ namespace MusicSyncConverter
 
         public async Task<OutputFile?> RemuxOrConvert(SyncConfig config, SongConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
-            var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.RelativePath);
+            var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.Path);
 
             if (!config.SourceExtensions.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
             {
@@ -54,23 +54,23 @@ namespace MusicSyncConverter
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.RelativePath}: {ex}");
+                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.Path}: {ex}");
                 return null;
             }
 
-            var tags = MapTags(mediaAnalysis, workItem.SourceFileInfo.RelativePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
+            var tags = MapTags(mediaAnalysis, workItem.SourceFileInfo.Path, config.DeviceConfig.CharacterLimitations, infoLogMessages);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
             if (audioStream == null)
             {
-                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.RelativePath}");
+                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.Path}");
                 return null;
             }
 
             EncoderInfo encoderInfo;
 
-            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, workItem.SourceFileInfo.RelativePath, false)).Select(x => x.Value).ToList();
+            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, workItem.SourceFileInfo.Path, false)).Select(x => x.Value).ToList();
 
             if (overrides.Any())
             {
