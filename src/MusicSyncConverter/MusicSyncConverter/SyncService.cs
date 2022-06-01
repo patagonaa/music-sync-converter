@@ -178,7 +178,7 @@ namespace MusicSyncConverter
                 }
             }
 
-            foreach (var infoLogMessage in infoLogMessages.Distinct())
+            foreach (var infoLogMessage in infoLogMessages.Distinct().OrderBy(x => x))
             {
                 Console.WriteLine(infoLogMessage);
             }
