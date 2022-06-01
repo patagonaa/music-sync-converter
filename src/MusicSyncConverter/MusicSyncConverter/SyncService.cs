@@ -7,6 +7,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -264,11 +265,14 @@ namespace MusicSyncConverter
         private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo> songOutput)
         {
             var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
+            var digits = playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length;
+            var i = 1;
             foreach (var song in playlist.Songs)
             {
                 var sourcePath = Path.Join(playlistDir, song.Path);
                 var songFileInfo = fileProvider.GetFileInfo(sourcePath);
-                var songFileName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
+                var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
+                var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
                 var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
                 var syncInfo = new SongSyncInfo
                 {
@@ -280,6 +284,7 @@ namespace MusicSyncConverter
                     TargetPath = songTargetPath
                 };
                 await songOutput.SendAsync(syncInfo);
+                i++;
             }
         }
 
