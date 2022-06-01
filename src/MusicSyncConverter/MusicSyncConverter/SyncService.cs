@@ -304,32 +304,36 @@ namespace MusicSyncConverter
                 sw.WriteLine("#EXTM3U");
                 foreach (var song in playlist.Songs)
                 {
-                    var relativeToRootSongPath = Path.Join(Path.GetDirectoryName(playlistFile.Path), song.Path);
+                    string? playlistDirectoryPath = Path.GetDirectoryName(playlistFile.Path);
+                    if (playlistDirectoryPath == null)
+                        throw new ArgumentException($"Playlist path {playlistDirectoryPath} is invalid");
+                    var playlistSongPath = Path.Join(playlistDirectoryPath, song.Path);
 
-                    string? targetPath;
+                    string? targetFilePath;
                     while (true)
                     {
                         var handledFilesComplete = handledFilesCompleteToken.IsCancellationRequested;
-                        var songMapping = handledFiles.FirstOrDefault(x => sourcePathComparer.Equals(x.SourcePath, relativeToRootSongPath));
+                        var songMapping = handledFiles.FirstOrDefault(x => sourcePathComparer.Equals(x.SourcePath, playlistSongPath));
                         if (songMapping != null)
                         {
-                            targetPath = songMapping.TargetPath;
+                            targetFilePath = songMapping.TargetPath;
                             break;
                         }
                         if (handledFilesComplete)
                         {
-                            infoLogMessages.TryAdd($"Missing song {relativeToRootSongPath} referenced in playlist {playlistFile.Path}");
+                            infoLogMessages.TryAdd($"Missing song {playlistSongPath} referenced in playlist {playlistFile.Path}");
                             allSongsFound = false;
-                            targetPath = null;
+                            targetFilePath = null;
                             break;
                         }
                         await Task.Delay(1000, cancellationToken);
                     }
-                    if (targetPath == null)
+                    if (targetFilePath == null)
                         continue;
 
-                    sw.WriteLine($"#EXTINF:0,{song.Name ?? Path.GetFileNameWithoutExtension(song.Path)}");
-                    sw.WriteLine(targetPath);
+                    string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
+                    sw.WriteLine($"#EXTINF:0,{_sanitizer.SanitizeText(syncConfig.DeviceConfig.CharacterLimitations, songName, false, out _)}");
+                    sw.WriteLine(Path.GetRelativePath(playlistDirectoryPath, targetFilePath));
                 }
             }
 
