@@ -107,6 +107,10 @@
                 {
                     "Char": "†",
                     "Replacement": "+"
+                },
+                {
+                    "Char": "…",
+                    "Replacement": "..."
                 }
             ],
             "NormalizeCase": true,
