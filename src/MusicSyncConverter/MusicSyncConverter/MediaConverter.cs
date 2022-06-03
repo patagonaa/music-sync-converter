@@ -86,7 +86,7 @@ namespace MusicSyncConverter
                 encoderInfo = config.DeviceConfig.FallbackFormat;
             }
 
-            var file = await Convert(workItem.SourceTempFilePath, workItem.AlbumArtPath, encoderInfo, tags, cancellationToken);
+            var file = await Convert(workItem.SourceTempFilePath, mediaAnalysis.PrimaryVideoStream != null, workItem.AlbumArtPath, encoderInfo, tags, cancellationToken);
             return new OutputFile
             {
                 ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
@@ -293,27 +293,28 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<string> Convert(string sourcePath, string? coverPath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
+        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
         {
             var outFilePath = TempFileHelper.GetTempFilePath();
             var args = FFMpegArguments
                 .FromFileInput(sourcePath);
-            var hasExternalCover = encoderInfo.CoverCodec != null && coverPath != null;
+            var hasExternalCover = encoderInfo.CoverCodec != null && externalCoverPath != null;
             if (hasExternalCover)
             {
-                args.AddFileInput(coverPath!);
+                args.AddFileInput(externalCoverPath!);
             }
 
             var argsProcessor = args.OutputToFile(outFilePath, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
             {
                 x.WithArgument(new CustomArgument("-map 0:a"));
-                if (hasExternalCover)
+
+                if (hasEmbeddedCover)
+                {
+                    x.WithArgument(new CustomArgument("-map 0:v -disposition:v attached_pic"));
+                }
+                else if (hasExternalCover)
                 {
                     x.WithArgument(new CustomArgument("-map 1:v -disposition:v attached_pic"));
-                }
-                else
-                {
-                    x.WithArgument(new CustomArgument("-map 0:v? -disposition:v attached_pic"));
                 }
 
                 x.WithAudioCodec(encoderInfo.Codec);
