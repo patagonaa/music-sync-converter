@@ -60,10 +60,10 @@ namespace MusicSyncConverter
                 {
                     toInsert = replacement.Replacement ?? string.Empty;
                 }
-                else if (config.ReplaceNonBmpChars && !inChar.IsBmp)
+                else if (NeedsNormalization(config.NormalizationMode, config.SupportedChars, inChar))
                 {
                     toInsert = inChar.ToString().Normalize(NormalizationForm.FormKC);
-                    if (toInsert.Length > 1)
+                    if (config.NormalizationMode == UnicodeNormalizationMode.NonBmp && toInsert.Length > 1)
                         toInsert = "_";
                     hasUnsupportedChars = true;
                 }
@@ -74,19 +74,21 @@ namespace MusicSyncConverter
 
                 if (config.NormalizeCase && first)
                 {
-                    toInsert = new string(toInsert.SelectMany((x, i) => i == 0 ? x.ToString().ToUpperInvariant() : x.ToString()).ToArray());
+                    toInsert = new string(toInsert.EnumerateRunes().SelectMany((x, i) => i == 0 ? Rune.ToUpperInvariant(x).ToString() : x.ToString()).ToArray());
                     first = false;
                 }
 
-                foreach (var outChar in toInsert)
+                foreach (var outChar in toInsert.EnumerateRunes())
                 {
+                    var outCharStr = outChar.ToString();
+
                     // if this is a path, replace chars that are invalid for path names
-                    if (isForPath && pathUnsupportedChars.Contains(outChar))
+                    if (isForPath && outCharStr.Any(x => pathUnsupportedChars.Contains(x)))
                     {
                         hasUnsupportedChars = true;
                         toReturn.Append('_');
                     }
-                    else if (config.SupportedChars != null && !config.SupportedChars.Contains(outChar))
+                    else if (config.SupportedChars != null && !config.SupportedChars.EnumerateRunes().Contains(outChar))
                     {
                         // we just accept our faith and insert the character anyways
                         hasUnsupportedChars = true;
@@ -101,6 +103,18 @@ namespace MusicSyncConverter
             }
 
             return toReturn.ToString();
+        }
+
+        private static bool NeedsNormalization(UnicodeNormalizationMode normalizationMode, string? supportedChars, Rune inChar)
+        {
+            return normalizationMode switch
+            {
+                UnicodeNormalizationMode.None => false,
+                UnicodeNormalizationMode.NonBmp => !inChar.IsBmp,
+                UnicodeNormalizationMode.Unsupported => supportedChars != null && !supportedChars.EnumerateRunes().Contains(inChar),
+                UnicodeNormalizationMode.All => true,
+                _ => throw new ArgumentOutOfRangeException(nameof(normalizationMode)),
+            };
         }
     }
 }

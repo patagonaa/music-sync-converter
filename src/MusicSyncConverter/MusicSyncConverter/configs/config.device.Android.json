@@ -1,7 +1,7 @@
 {
     "DeviceConfig": {
         "CharacterLimitations": {
-            "ReplaceNonBmpChars": true // Android does not want to read/write non UCS-2 characters on sd cards
+            "NormalizationMode": "NonBmp" // Android does not want to read/write non UCS-2 characters on sd cards
         },
         "SupportedFormats": [
             {

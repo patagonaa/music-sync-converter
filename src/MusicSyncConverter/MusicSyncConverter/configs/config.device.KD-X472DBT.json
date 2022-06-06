@@ -114,7 +114,7 @@
                 }
             ],
             "NormalizeCase": true,
-            "ReplaceNonBmpChars": true
+            "NormalizationMode": "Unsupported"
         },
         "ResolvePlaylists": true
     }

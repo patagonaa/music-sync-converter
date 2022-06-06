@@ -84,14 +84,32 @@ namespace MusicSyncConverter.UnitTests
         [TestCase("201X", "𝟚𝟘𝟙𝕏")]
         [TestCase("201XABC", "𝟚𝟘𝟙𝕏ABC")]
         [TestCase("201X²³", "𝟚𝟘𝟙𝕏²³")]
-        public void Test_Limitations_SurrogateText_ReplaceNonBmpChars(string expected, string text)
+        [TestCase("_", "𓃒")]
+        public void Test_Limitations_NormalizeNonBmp_ReplaceNonBmpChars(string expected, string text)
         {
             var limitations = new CharacterLimitations
             {
                 NormalizeCase = false,
                 Replacements = null,
-                ReplaceNonBmpChars = true,
+                NormalizationMode = UnicodeNormalizationMode.NonBmp,
                 SupportedChars = null
+            };
+            var result = _sut.SanitizeText(limitations, text, false, out _);
+            Assert.AreEqual(expected, result);
+        }
+
+        [TestCase("VIII", "Ⅷ", "")]
+        [TestCase("ABC", "ABC", "")]
+        [TestCase("4,63 × 10¹⁷⁰", "4,63 × 10¹⁷⁰", "×¹⁷⁰")]
+        [TestCase("𓃒", "𓃒", "")]
+        public void Test_Limitations_NormalizeUnsupported_ReplaceUnsupportedChars(string expected, string text, string supportedChars)
+        {
+            var limitations = new CharacterLimitations
+            {
+                NormalizeCase = false,
+                Replacements = null,
+                NormalizationMode = UnicodeNormalizationMode.Unsupported,
+                SupportedChars = supportedChars
             };
             var result = _sut.SanitizeText(limitations, text, false, out _);
             Assert.AreEqual(expected, result);

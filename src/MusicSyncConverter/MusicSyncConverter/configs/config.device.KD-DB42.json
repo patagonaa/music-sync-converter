@@ -78,7 +78,7 @@
                     "Replacement": "..."
                 }
             ],
-            "ReplaceNonBmpChars": true
+            "NormalizationMode": "Unsupported"
         },
         "ResolvePlaylists": true
     }

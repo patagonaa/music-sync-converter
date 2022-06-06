@@ -14,8 +14,8 @@ Works on Windows and Linux, macOS is untested.
 - fast conversion due to pipelining and multithreading
 - automatically embed album art from the directory into the file
 - handle unsupported characters in path and tags
-    - replace unsupported characters (replacement list)
-    - normalize/replace characters that can't be represented with UCS-2 (outside "BMP encoding range"), like 𝟙𝟚𝟛𝕏 (Android doesn't like those on SD cards)
+    - replace unsupported characters with a replacement list
+    - replace unsupported characters using Unicode compatibility normalization 
 - handle m3u playlists by adjusting the file path or resolving the playlist to a directory with the playlist's songs
 - order the FAT32 file table (for embedded devices that don't sort directories before playing)
 - normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
@@ -118,11 +118,10 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
 - Convert all other files to AAC-LC 192kbit/s
 - Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
 - Replace unsupported characters (in directory and file names, and tag values)
-- Replace characters that can't be represented with UCS-2 (required for Android devices)
+- Replace non-BMP characters (characters that can't be represented with UCS-2) (required for Android devices)
 - Change every first character of file/dir names to uppercase so devices that sort case-sensitive work properly
 - Resolve playlists to directories
 - Override codec settings for  `Z:\Audio\Audio Books` so all audio books are converted to 64kbit/s mono to save storage space
-
 
 ```js
 {
@@ -195,7 +194,7 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
                     "Replacement": "ss"
                 }
             ],
-            "ReplaceNonBmpChars": true, // replace non UCS-2 chars
+            "NormalizationMode": "NonBmp", // can be "None", "NonBmp", "Unsupported", "All"
             "NormalizeCase": true // change every first character of file/dir names to uppercase
         },
         "ResolvePlaylists": true // convert playlists to directories with the respective files
