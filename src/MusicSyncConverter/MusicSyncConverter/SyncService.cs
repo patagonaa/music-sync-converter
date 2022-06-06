@@ -95,20 +95,20 @@ namespace MusicSyncConverter
                     var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await ReadSong(x, fileProvider, cancellationToken), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-                    var compareSongBlock = new TransformManyBlock<SongSyncInfo, SongReadWorkItem>(x => new[] { CompareSongDates(x, config, targetPathComparer, syncTarget, infoLogMessages) }.Where(y => y != null)!, workerOptions);
+                    var compareSongBlock = new TransformManyBlock<SongSyncInfo, SongReadWorkItem>(x => new[] { CompareSongDates(x, config, targetPathComparer, syncTarget, infoLogMessages) }.Where(y => y != null)!, readOptions);
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     var getSyncInfoBlock = new TransformBlock<SourceFileInfo, SongSyncInfo>(x => GetSyncInfo(x), workerOptions);
                     getSyncInfoBlock.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
                     // playlist handling
-                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => new[] { await ReadPlaylist(file, fileProvider) }.Where(x => x != null)!);
+                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => new[] { await ReadPlaylist(file, fileProvider) }.Where(x => x != null)!, readOptions);
 
                     IDataflowBlock? resolvePlaylistBlock = null;
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock));
+                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
