@@ -51,6 +51,8 @@ namespace MusicSyncConverter
 
             var first = true;
 
+            var supportedRunes = config.SupportedChars?.EnumerateRunes().ToList();
+
             foreach (var inChar in text.EnumerateRunes())
             {
                 string toInsert;
@@ -60,7 +62,7 @@ namespace MusicSyncConverter
                 {
                     toInsert = replacement.Replacement ?? string.Empty;
                 }
-                else if (NeedsNormalization(config.NormalizationMode, config.SupportedChars, inChar))
+                else if (NeedsNormalization(config.NormalizationMode, supportedRunes, inChar))
                 {
                     toInsert = inChar.ToString().Normalize(NormalizationForm.FormKC);
                     if (config.NormalizationMode == UnicodeNormalizationMode.NonBmp && toInsert.Length > 1)
@@ -88,7 +90,7 @@ namespace MusicSyncConverter
                         hasUnsupportedChars = true;
                         toReturn.Append('_');
                     }
-                    else if (config.SupportedChars != null && !config.SupportedChars.EnumerateRunes().Contains(outChar))
+                    else if (supportedRunes != null && !supportedRunes.Contains(outChar))
                     {
                         // we just accept our faith and insert the character anyways
                         hasUnsupportedChars = true;
@@ -105,13 +107,13 @@ namespace MusicSyncConverter
             return toReturn.ToString();
         }
 
-        private static bool NeedsNormalization(UnicodeNormalizationMode normalizationMode, string? supportedChars, Rune inChar)
+        private static bool NeedsNormalization(UnicodeNormalizationMode normalizationMode, IList<Rune>? supportedRunes, Rune inChar)
         {
             return normalizationMode switch
             {
                 UnicodeNormalizationMode.None => false,
                 UnicodeNormalizationMode.NonBmp => !inChar.IsBmp,
-                UnicodeNormalizationMode.Unsupported => supportedChars != null && !supportedChars.EnumerateRunes().Contains(inChar),
+                UnicodeNormalizationMode.Unsupported => supportedRunes != null && !supportedRunes.Contains(inChar),
                 UnicodeNormalizationMode.All => true,
                 _ => throw new ArgumentOutOfRangeException(nameof(normalizationMode)),
             };
