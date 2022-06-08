@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.FileProviders;
+﻿using FileProviders.Async;
+using Microsoft.Extensions.FileProviders;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.FileProviders;
 using MusicSyncConverter.FileProviders.Abstractions;
@@ -10,6 +11,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -102,13 +104,13 @@ namespace MusicSyncConverter
                     getSyncInfoBlock.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
                     // playlist handling
-                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => new[] { await ReadPlaylist(file, fileProvider) }.Where(x => x != null)!, readOptions);
+                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => new[] { await ReadPlaylist(file, fileProvider, cancellationToken) }.Where(x => x != null)!, readOptions);
 
                     IDataflowBlock? resolvePlaylistBlock = null;
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock), workerOptions);
+                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock, cancellationToken), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
@@ -192,7 +194,7 @@ namespace MusicSyncConverter
                 var r = new Random();
                 var files = ReadDir(config, fileProvider, "", targetCaseSensitive, cancellationToken);
                 //.OrderBy(x => r.Next()); // randomize order so IO- and CPU-heavy actions are more balanced
-                foreach (var file in files)
+                await foreach (var file in files)
                 {
                     await targetBlock.SendAsync(file, cancellationToken);
                 }
@@ -217,7 +219,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, IFileProvider fileProvider, string dir, bool caseSensitive, CancellationToken cancellationToken)
+        private async IAsyncEnumerable<SourceFileInfo> ReadDir(SyncConfig config, IFileProvider fileProvider, string dir, bool caseSensitive, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -225,27 +227,52 @@ namespace MusicSyncConverter
             {
                 yield break;
             }
-            var directoryContents = fileProvider.GetDirectoryContents(dir).ToList();
-            foreach (var file in directoryContents.Where(x => !x.IsDirectory))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                yield return new SourceFileInfo
-                {
-                    Path = Path.Join(dir, file.Name),
-                    ModifiedDate = file.LastModified
-                };
-            }
 
-            foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
+            if (fileProvider is IAsyncFileProvider asyncFileProvider)
             {
-                foreach (var file in ReadDir(config, fileProvider, Path.Join(dir, subDir.Name), caseSensitive, cancellationToken))
+                var directoryContents = await (await asyncFileProvider.GetDirectoryContentsAsync(dir, cancellationToken)).ToListAsync(cancellationToken);
+                foreach (var file in directoryContents.Where(x => !x.IsDirectory))
                 {
-                    yield return file;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    yield return new SourceFileInfo
+                    {
+                        Path = Path.Join(dir, file.Name),
+                        ModifiedDate = file.LastModified
+                    };
+                }
+
+                foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
+                {
+                    await foreach (var file in ReadDir(config, fileProvider, Path.Join(dir, subDir.Name), caseSensitive, cancellationToken))
+                    {
+                        yield return file;
+                    }
+                }
+            }
+            else
+            {
+                var directoryContents = fileProvider.GetDirectoryContents(dir).ToList();
+                foreach (var file in directoryContents.Where(x => !x.IsDirectory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    yield return new SourceFileInfo
+                    {
+                        Path = Path.Join(dir, file.Name),
+                        ModifiedDate = file.LastModified
+                    };
+                }
+
+                foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
+                {
+                    await foreach (var file in ReadDir(config, fileProvider, Path.Join(dir, subDir.Name), caseSensitive, cancellationToken))
+                    {
+                        yield return file;
+                    }
                 }
             }
         }
 
-        private async Task<Playlist?> ReadPlaylist(SourceFileInfo playlistFile, IFileProvider fileProvider)
+        private async Task<Playlist?> ReadPlaylist(SourceFileInfo playlistFile, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
             var playlistExtensions = new[] { ".m3u", ".m3u8" };
             if (!playlistExtensions.Contains(Path.GetExtension(playlistFile.Path)))
@@ -253,16 +280,26 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var fileInfo = fileProvider.GetFileInfo(playlistFile.Path);
+            Stream inFile;
+            if (fileProvider is IAsyncFileProvider asyncFileProvider)
+            {
+                var fileInfo = await asyncFileProvider.GetFileInfoAsync(playlistFile.Path, cancellationToken);
+                inFile = await fileInfo.CreateReadStreamAsync(cancellationToken);
+            }
+            else
+            {
+                inFile = fileProvider.GetFileInfo(playlistFile.Path).CreateReadStream();
+            }
+
             IReadOnlyList<PlaylistSong> playlistSongs;
-            using (var sr = new StreamReader(fileInfo.CreateReadStream(), Encoding.UTF8))
+            using (var sr = new StreamReader(inFile, Encoding.UTF8))
             {
                 playlistSongs = await _playlistParser.ParseM3u(sr);
             }
             return new Playlist(playlistFile, playlistSongs);
         }
 
-        private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo> songOutput)
+        private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo> songOutput, CancellationToken cancellationToken)
         {
             var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
             var digits = playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length;
@@ -270,7 +307,17 @@ namespace MusicSyncConverter
             foreach (var song in playlist.Songs)
             {
                 var sourcePath = Path.Join(playlistDir, song.Path);
-                var songFileInfo = fileProvider.GetFileInfo(sourcePath);
+
+                DateTimeOffset songLastModified;
+                if (fileProvider is IAsyncFileProvider asyncFileProvider)
+                {
+                    var fileInfo = await asyncFileProvider.GetFileInfoAsync(sourcePath, cancellationToken);
+                    songLastModified = fileInfo.LastModified;
+                }
+                else
+                {
+                    songLastModified = fileProvider.GetFileInfo(sourcePath).LastModified;
+                }
                 var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
                 var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
                 var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
@@ -279,7 +326,7 @@ namespace MusicSyncConverter
                     SourceFileInfo = new SourceFileInfo
                     {
                         Path = sourcePath,
-                        ModifiedDate = songFileInfo.LastModified
+                        ModifiedDate = songLastModified
                     },
                     TargetPath = songTargetPath
                 };
@@ -431,7 +478,17 @@ namespace MusicSyncConverter
                     Console.WriteLine($"--> Read {workItem.SourceFileInfo.Path}");
 
                     string tmpFilePath;
-                    using (var inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.Path).CreateReadStream())
+                    Stream inFile;
+                    if (fileProvider is IAsyncFileProvider asyncFileProvider)
+                    {
+                        var fileInfo = await asyncFileProvider.GetFileInfoAsync(workItem.SourceFileInfo.Path, cancellationToken);
+                        inFile = await fileInfo.CreateReadStreamAsync(cancellationToken);
+                    }
+                    else
+                    {
+                        inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.Path).CreateReadStream();
+                    }
+                    using (inFile)
                     {
                         tmpFilePath = await TempFileHelper.CopyToTempFile(inFile, cancellationToken);
                     }
@@ -559,7 +616,7 @@ namespace MusicSyncConverter
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if(PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
+                if (PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
                 {
                     // hidden file/dir
                     continue;
