@@ -172,7 +172,7 @@ namespace MusicSyncConverter
                     }
 
                     // delete additional files and empty directories
-                    DeleteAdditionalFiles(config, syncTarget, handledFiles, targetPathComparer, cancellationToken);
+                    DeleteAdditionalFiles(syncTarget, handledFiles, targetPathComparer, cancellationToken);
                     DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
@@ -376,7 +376,7 @@ namespace MusicSyncConverter
 
             var files = syncTarget.GetDirectoryContents(targetDirPath);
 
-            var targetInfos = files.Exists ? files.Where(x => targetPathComparer.Equals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
+            var targetInfos = files.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
 
             if (targetInfos.Length == 1 && FileDatesEqual(syncInfo.SourceFileInfo.ModifiedDate, targetInfos[0].LastModified))
             {
@@ -551,7 +551,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(SyncConfig config, ISyncTarget syncTarget, ConcurrentBag<FileSourceTargetInfo> handledFiles, IEqualityComparer<string> targetPathComparer, CancellationToken cancellationToken)
+        private void DeleteAdditionalFiles(ISyncTarget syncTarget, ConcurrentBag<FileSourceTargetInfo> handledFiles, IEqualityComparer<string> targetPathComparer, CancellationToken cancellationToken)
         {
             var files = GetAllFiles("", syncTarget);
             var toDelete = new List<IFileInfo>();
@@ -559,7 +559,13 @@ namespace MusicSyncConverter
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (!handledFiles.Any(x => targetPathComparer.Equals(x.TargetPath, path)) && !file.Name.StartsWith('.'))
+                if(PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
+                {
+                    // hidden file/dir
+                    continue;
+                }
+
+                if (!handledFiles.Any(x => targetPathComparer.Equals(x.TargetPath, path)))
                 {
                     toDelete.Add(file);
                     Console.WriteLine($"Delete {path}");
