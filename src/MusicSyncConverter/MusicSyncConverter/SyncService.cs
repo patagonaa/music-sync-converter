@@ -245,9 +245,15 @@ namespace MusicSyncConverter
             foreach (var file in directoryContents.Where(x => !x.IsDirectory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                string filePath = Path.Join(dir, file.Name);
+                if (config.Exclude?.Any(glob => _pathMatcher.Matches(glob, filePath, caseSensitive)) ?? false)
+                {
+                    continue;
+                }
+
                 yield return new SourceFileInfo
                 {
-                    Path = Path.Join(dir, file.Name),
+                    Path = filePath,
                     ModifiedDate = file.LastModified
                 };
             }
@@ -287,6 +293,9 @@ namespace MusicSyncConverter
                 var i = 1;
                 foreach (var song in playlist.Songs)
                 {
+                    if (Path.IsPathRooted(song.Path))
+                        throw new InvalidOperationException($"Playlist song paths must not be absolute! In {playlist.PlaylistFileInfo.Path}");
+
                     var sourcePath = Path.Join(playlistDir, song.Path);
                     var songFileInfo = fileProvider.GetFileInfo(sourcePath);
                     var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
