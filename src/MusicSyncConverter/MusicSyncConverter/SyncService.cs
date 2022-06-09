@@ -133,7 +133,9 @@ namespace MusicSyncConverter
                     try
                     {
                         // if there is a fault during comparison/reading/conversion/writing, cancel all other pipeline elements immediately to avoid freezing
-                        _ = writeBlock.Completion.ContinueWith(x => cancellationTokenSource.Cancel(), TaskContinuationOptions.OnlyOnFaulted);
+                        _ = writeBlock.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
+                        _ = convertSongBlock.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
+                        _ = convertPlaylistBlock?.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
 
                         await fileRouterBlock.Completion;
                         getSyncInfoBlock.Complete();
@@ -183,6 +185,20 @@ namespace MusicSyncConverter
             {
                 Console.WriteLine(infoLogMessage);
             }
+        }
+
+        private void HandlePipelineError(AggregateException ex, CancellationTokenSource cancellationTokenSource)
+        {
+            var flattened = ex.Flatten();
+            if(flattened.InnerExceptions.Count == 1)
+            {
+                Console.WriteLine(flattened.InnerException);
+            }
+            else
+            {
+                Console.WriteLine(flattened);
+            }
+            cancellationTokenSource.Cancel();
         }
 
         private async Task ReadDirs(SyncConfig config, IFileProvider fileProvider, ITargetBlock<SourceFileInfo> targetBlock, bool targetCaseSensitive, CancellationToken cancellationToken)
@@ -264,27 +280,35 @@ namespace MusicSyncConverter
 
         private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo> songOutput)
         {
-            var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
-            var digits = playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length;
-            var i = 1;
-            foreach (var song in playlist.Songs)
+            try
             {
-                var sourcePath = Path.Join(playlistDir, song.Path);
-                var songFileInfo = fileProvider.GetFileInfo(sourcePath);
-                var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
-                var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
-                var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
-                var syncInfo = new SongSyncInfo
+                var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
+                var digits = playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length;
+                var i = 1;
+                foreach (var song in playlist.Songs)
                 {
-                    SourceFileInfo = new SourceFileInfo
+                    var sourcePath = Path.Join(playlistDir, song.Path);
+                    var songFileInfo = fileProvider.GetFileInfo(sourcePath);
+                    var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
+                    var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
+                    var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
+                    var syncInfo = new SongSyncInfo
                     {
-                        Path = sourcePath,
-                        ModifiedDate = songFileInfo.LastModified
-                    },
-                    TargetPath = songTargetPath
-                };
-                await songOutput.SendAsync(syncInfo);
-                i++;
+                        SourceFileInfo = new SourceFileInfo
+                        {
+                            Path = sourcePath,
+                            ModifiedDate = songFileInfo.LastModified
+                        },
+                        TargetPath = songTargetPath
+                    };
+                    await songOutput.SendAsync(syncInfo);
+                    i++;
+                }
+            }
+            catch (Exception ex)
+            {
+                songOutput.Fault(ex);
+                throw;
             }
         }
 
@@ -504,14 +528,6 @@ namespace MusicSyncConverter
                         throw new ArgumentException("Invalid ConvertActionType");
                 }
             }
-            catch (Exception ex)
-            {
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    Console.WriteLine(ex);
-                    throw;
-                }
-            }
             finally
             {
                 if (workItem.SourceTempFilePath != null)
@@ -519,7 +535,6 @@ namespace MusicSyncConverter
                     File.Delete(workItem.SourceTempFilePath);
                 }
             }
-            return null;
         }
 
         private async Task WriteFile(OutputFile file, ISyncTarget syncTarget, CancellationToken cancellationToken)
@@ -559,7 +574,7 @@ namespace MusicSyncConverter
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if(PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
+                if (PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
                 {
                     // hidden file/dir
                     continue;
