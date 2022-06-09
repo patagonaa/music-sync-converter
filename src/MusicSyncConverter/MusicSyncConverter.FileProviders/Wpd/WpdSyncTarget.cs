@@ -46,9 +46,11 @@ namespace MusicSyncConverter.FileProviders.Wpd
         {
             var deviceMan = new IPortableDeviceManager();
 
+            var deviceNames = new List<string>();
             foreach (var deviceId in deviceMan.GetDevices())
             {
                 string friendlyName = deviceMan.GetDeviceFriendlyName(deviceId);
+                deviceNames.Add(friendlyName);
                 if (friendlyName == toFind)
                 {
                     var device = new IPortableDevice();
@@ -56,7 +58,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     return device;
                 }
             }
-            throw new InvalidOperationException($"Device {toFind} not found!");
+            throw new InvalidOperationException($"Device {toFind} not found! Available devices: {string.Join(";", deviceNames)}");
         }
 
         private IPortableDeviceValues GetClientInfo()
@@ -80,7 +82,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             lock (_syncLock)
             {
                 var sw = Stopwatch.StartNew();
-                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(path));
+                var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(path) ?? throw new ArgumentNullException(nameof(path)));
                 var fileName = Path.GetFileName(path);
                 Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds+"ms");
                 sw.Restart();
@@ -194,10 +196,10 @@ namespace MusicSyncConverter.FileProviders.Wpd
         {
             lock (_syncLock)
             {
-                if (!_directoryContentsCache.TryGetValue(subPath, out IDirectoryContents directoryContents))
+                if (!_directoryContentsCache.TryGetValue(subPath, out IDirectoryContents? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
-                    directoryContents = obj == null ? (IDirectoryContents)NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _syncLock, _content, _contentProperties);
+                    directoryContents = obj == null ? NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _syncLock, _content, _contentProperties);
                     _directoryContentsCache.TryAdd(subPath, directoryContents);
                 }
                 return directoryContents;

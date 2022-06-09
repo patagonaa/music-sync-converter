@@ -32,15 +32,17 @@ namespace MusicSyncConverter.FileProviders.Physical
         {
             var absolutePath = Path.Join(_basePath, path);
 
-            var dirInfo = new DirectoryInfo(Path.GetDirectoryName(absolutePath));
+            var dirInfo = new DirectoryInfo(Path.GetDirectoryName(absolutePath)!);
             _updatedDirectories.Add(dirInfo.FullName);
             while (!dirInfo.Exists)
             {
                 dirInfo = dirInfo.Parent;
+                if (dirInfo == null)
+                    throw new InvalidOperationException($"Parent should not be null! {absolutePath}");
                 _updatedDirectories.Add(dirInfo.FullName);
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
 
             File.Delete(absolutePath); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
             using (var outputFile = File.OpenWrite(absolutePath))

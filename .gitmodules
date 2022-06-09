@@ -1,0 +1,3 @@
+[submodule "lib/SharpAdbClient"]
+	path = lib/SharpAdbClient
+	url = https://github.com/patagonaa/madb.git

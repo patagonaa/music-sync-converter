@@ -1,4 +1,5 @@
 ﻿using MusicSyncConverter.FileProviders.Abstractions;
+using MusicSyncConverter.FileProviders.Adb;
 using MusicSyncConverter.FileProviders.Physical;
 using MusicSyncConverter.FileProviders.Wpd;
 using System;
@@ -29,12 +30,19 @@ namespace MusicSyncConverter.FileProviders
                     }
                 case "wpd":
                     {
-                        if(Environment.OSVersion.Platform != PlatformID.Win32NT)
+                        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                             throw new PlatformNotSupportedException("_Windows_ Portable Devices is not supported on non-Windows systems.");
                         var wpdPath = uriString.Replace("wpd://", "");
                         var pathParts = wpdPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
                         return new WpdSyncTarget(pathParts[0], string.Join(Path.DirectorySeparatorChar, pathParts[1..]));
+                    }
+                case "adb":
+                    {
+                        var adbPath = uriString.Replace("adb://", "");
+                        var pathParts = adbPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                        return new AdbSyncTarget(pathParts[0], string.Join(Path.DirectorySeparatorChar, pathParts[1..]));
                     }
                 default:
                     throw new ArgumentException($"Invalid URI Scheme: {splitUri[0]}");

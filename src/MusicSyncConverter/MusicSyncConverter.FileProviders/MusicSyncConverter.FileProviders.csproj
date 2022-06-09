@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
@@ -10,6 +10,10 @@
         <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="6.0.0" />
         <PackageReference Include="patagona.FileProviders.WebDav" Version="1.0.4" />
         <PackageReference Include="Vanara.PInvoke.PortableDeviceApi" Version="3.4.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\lib\SharpAdbClient\SharpAdbClient\SharpAdbClient.csproj" />
     </ItemGroup>
 
 </Project>
