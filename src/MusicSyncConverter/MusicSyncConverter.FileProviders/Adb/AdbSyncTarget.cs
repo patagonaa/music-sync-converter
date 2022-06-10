@@ -17,6 +17,7 @@ namespace MusicSyncConverter.FileProviders.Adb
         private readonly DeviceData _device;
         private readonly SyncService _syncService;
         private readonly string _basePath;
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public AdbSyncTarget(string serial, string basePath)
         {
@@ -51,18 +52,26 @@ namespace MusicSyncConverter.FileProviders.Adb
 
             var receiver = new SyncTargetShellOutputReceiver();
 
-            foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
+            await _semaphore.WaitAsync(cancellationToken);
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                string command = "rmdir " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
-                await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
-            }
+                foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string command = "rmdir " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
+                    await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                }
 
-            foreach (var batch in adbItems.Where(x => !x.IsDirectory).Chunk(10))
+                foreach (var batch in adbItems.Where(x => !x.IsDirectory).Chunk(10))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string command = "rm " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
+                    await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                }
+            }
+            finally
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                string command = "rm " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
-                await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                _semaphore.Release();
             }
 
             if (receiver.Lines.Any())
@@ -101,7 +110,8 @@ namespace MusicSyncConverter.FileProviders.Adb
         {
             var path = UnixizePath(Path.Join(_basePath, subpath));
 
-            lock (_syncService)
+            _semaphore.Wait();
+            try
             {
                 var stat = _syncService.Stat(path);
                 if (stat.FileMode == 0)
@@ -110,16 +120,25 @@ namespace MusicSyncConverter.FileProviders.Adb
                 var dirList = _syncService.GetDirectoryListing(path);
                 return new AdbDirectoryContents(path, dirList, _syncService);
             }
+            finally
+            {
+                _semaphore.Release();
+            }
         }
 
         public IFileInfo GetFileInfo(string subpath)
         {
             var path = UnixizePath(Path.Join(_basePath, subpath));
 
-            lock (_syncService)
+            _semaphore.Wait();
+            try
             {
                 var stat = _syncService.Stat(path);
                 return new AdbFileInfo(path, stat, _syncService);
+            }
+            finally
+            {
+                _semaphore.Release();
             }
         }
 
@@ -133,15 +152,19 @@ namespace MusicSyncConverter.FileProviders.Adb
             throw new NotImplementedException();
         }
 
-        public Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
+        public async Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
             var path = UnixizePath(Path.Join(_basePath, subpath));
 
-            lock (_syncService)
+            await _semaphore.WaitAsync(cancellationToken);
+            try
             {
                 _syncService.Push(content, path, 660, modified ?? DateTimeOffset.Now, null, cancellationToken);
             }
-            return Task.CompletedTask;
+            finally
+            {
+                _semaphore.Release();
+            }
         }
 
         internal static string UnixizePath(string path)
