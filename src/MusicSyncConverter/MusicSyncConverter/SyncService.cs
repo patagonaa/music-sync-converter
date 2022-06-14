@@ -567,13 +567,17 @@ namespace MusicSyncConverter
             {
                 Console.WriteLine($"--> Write {file.Path}");
 
+                var sw = Stopwatch.StartNew();
+                long fileSize;
                 using (var tmpFile = File.OpenRead(file.TempFilePath))
                 {
+                    fileSize = tmpFile.Length;
                     await syncTarget.WriteFile(file.Path, tmpFile, file.ModifiedDate, cancellationToken);
                 }
+                sw.Stop();
 
                 File.Delete(file.TempFilePath);
-                Console.WriteLine($"<-- Write {file.Path}");
+                Console.WriteLine($"<-- Write ({(fileSize / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2", CultureInfo.InvariantCulture)} MiB/s) {file.Path}");
             }
             catch (TaskCanceledException)
             {
