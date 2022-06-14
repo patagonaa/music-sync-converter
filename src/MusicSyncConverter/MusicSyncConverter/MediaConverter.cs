@@ -50,7 +50,7 @@ namespace MusicSyncConverter
             IMediaAnalysis mediaAnalysis;
             try
             {
-                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath);
+                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath, null, cancellationToken);
             }
             catch (Exception ex)
             {

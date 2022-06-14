@@ -9,7 +9,7 @@
         <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="6.0.0" />
         <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="6.0.0" />
         <PackageReference Include="patagona.FileProviders.WebDav" Version="1.0.4" />
-        <PackageReference Include="Vanara.PInvoke.PortableDeviceApi" Version="3.4.0" />
+        <PackageReference Include="Vanara.PInvoke.PortableDeviceApi" Version="3.4.2" />
     </ItemGroup>
 
     <ItemGroup>
