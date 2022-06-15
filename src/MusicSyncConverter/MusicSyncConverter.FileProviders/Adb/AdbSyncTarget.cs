@@ -27,7 +27,6 @@ namespace MusicSyncConverter.FileProviders.Adb
             if (device == null)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
             _device = device;
-            var ver = _adbClient.GetAdbVersion();
             _syncService = new SyncService(_adbClient, _device);
             _basePath = basePath;
         }
