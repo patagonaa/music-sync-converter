@@ -130,9 +130,10 @@ namespace MusicSyncConverter
                         await readPlaylistBlock.SendAsync(file);
                     }, workerOptions);
 
+                    Console.WriteLine("Checking for new/changed files");
+
                     // start pipeline by adding files to check for changes
                     _ = ReadDirs(config, fileProvider, fileRouterBlock, targetCaseSensitive, cancellationToken);
-
                     // wait until every pipeline element is done
                     try
                     {
@@ -178,7 +179,9 @@ namespace MusicSyncConverter
                     }
 
                     // delete additional files and empty directories
+                    Console.WriteLine("Checking for leftover files");
                     DeleteAdditionalFiles(syncTarget, handledFiles, targetPathComparer, cancellationToken);
+                    Console.WriteLine("Checking for empty subdirectories");
                     DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
@@ -545,7 +548,7 @@ namespace MusicSyncConverter
                             if (outFile != null)
                                 handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, outFile.Path));
                             sw.Stop();
-                            Console.WriteLine($"<-- Convert {sw.ElapsedMilliseconds}ms {workItem.SourceFileInfo.Path}");
+                            Console.WriteLine($"<-- Convert ({sw.ElapsedMilliseconds}ms) {workItem.SourceFileInfo.Path}");
                             return outFile;
                         }
                     default:
