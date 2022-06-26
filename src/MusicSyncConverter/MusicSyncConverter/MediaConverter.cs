@@ -38,39 +38,37 @@ namespace MusicSyncConverter
             "comment"
         };
 
-        public async Task<OutputFile?> RemuxOrConvert(SyncConfig config, SongConvertWorkItem workItem, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, string outputFile, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
-            var sourceExtension = Path.GetExtension(workItem.SourceFileInfo.Path);
+            var sourceExtension = Path.GetExtension(originalFilePath);
 
             if (!config.SourceExtensions.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
             {
-                return null;
+                throw new Exception("Cannot convert files not in SourceExtensions");
             }
 
             IMediaAnalysis mediaAnalysis;
             try
             {
-                mediaAnalysis = await FFProbe.AnalyseAsync(workItem.SourceTempFilePath, null, cancellationToken);
+                mediaAnalysis = await FFProbe.AnalyseAsync(inputFile);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error while FFProbe {workItem.SourceFileInfo.Path}: {ex}");
-                return null;
+                throw new Exception("Error during FFProbe: " + ex);
             }
 
-            var tags = MapTags(mediaAnalysis, workItem.SourceFileInfo.Path, config.DeviceConfig.CharacterLimitations, infoLogMessages);
+            var tags = MapTags(mediaAnalysis, originalFilePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
             if (audioStream == null)
             {
-                Console.WriteLine($"Missing Audio stream: {workItem.SourceFileInfo.Path}");
-                return null;
+                throw new Exception("Missing Audio stream");
             }
 
             EncoderInfo encoderInfo;
 
-            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, workItem.SourceFileInfo.Path, false)).Select(x => x.Value).ToList();
+            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
 
             if (overrides.Any())
             {
@@ -86,13 +84,8 @@ namespace MusicSyncConverter
                 encoderInfo = config.DeviceConfig.FallbackFormat;
             }
 
-            var file = await Convert(workItem.SourceTempFilePath, mediaAnalysis.PrimaryVideoStream != null, workItem.AlbumArtPath, encoderInfo, tags, cancellationToken);
-            return new OutputFile
-            {
-                ModifiedDate = workItem.SourceFileInfo.ModifiedDate,
-                TempFilePath = file,
-                Path = Path.ChangeExtension(workItem.TargetFilePath, encoderInfo.Extension)
-            };
+            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, tags, cancellationToken);
+            return (outputFile, encoderInfo.Extension);
         }
 
         private EncoderInfo ApplyOverrides(EncoderInfo fallbackFormat, FileFormatLimitation toApply)
@@ -293,9 +286,8 @@ namespace MusicSyncConverter
             return false;
         }
 
-        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
+        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
         {
-            var outFilePath = TempFileHelper.GetTempFilePath();
             var args = FFMpegArguments
                 .FromFileInput(sourcePath);
             var hasExternalCover = encoderInfo.CoverCodec != null && externalCoverPath != null;
