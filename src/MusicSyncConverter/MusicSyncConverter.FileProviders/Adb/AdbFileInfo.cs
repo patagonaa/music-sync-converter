@@ -11,12 +11,14 @@ namespace MusicSyncConverter.FileProviders.Adb
         private readonly string _directory;
         private readonly FileStatistics _item;
         private readonly SyncService _syncService;
+        private readonly SemaphoreSlim _syncServiceSemaphore;
 
-        public AdbFileInfo(string directory, FileStatistics item, SyncService syncService)
+        public AdbFileInfo(string directory, FileStatistics item, SyncService syncService, SemaphoreSlim syncServiceSemaphore)
         {
             _directory = directory;
             _item = item;
             _syncService = syncService;
+            _syncServiceSemaphore = syncServiceSemaphore;
         }
 
         public bool Exists => _item.FileMode != 0;
@@ -35,9 +37,17 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public Stream CreateReadStream()
         {
-            var ms = new MemoryStream(_item.Size);
-            _syncService.Pull(FullPath, ms, null, CancellationToken.None);
-            return ms;
+            _syncServiceSemaphore.Wait();
+            try
+            {
+                var ms = new MemoryStream(_item.Size);
+                _syncService.Pull(FullPath, ms, null, CancellationToken.None);
+                return ms;
+            }
+            finally
+            {
+                _syncServiceSemaphore.Release();
+            }
         }
     }
 }

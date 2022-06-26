@@ -102,7 +102,9 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public void Dispose()
         {
+            _semaphore.Wait();
             _syncService.Dispose();
+            _semaphore.Dispose();
         }
 
         public IDirectoryContents GetDirectoryContents(string subpath)
@@ -117,7 +119,7 @@ namespace MusicSyncConverter.FileProviders.Adb
                     return NotFoundDirectoryContents.Singleton;
 
                 var dirList = _syncService.GetDirectoryListing(path);
-                return new AdbDirectoryContents(path, dirList, _syncService);
+                return new AdbDirectoryContents(path, dirList, _syncService, _semaphore);
             }
             finally
             {
@@ -133,7 +135,7 @@ namespace MusicSyncConverter.FileProviders.Adb
             try
             {
                 var stat = _syncService.Stat(path);
-                return new AdbFileInfo(path, stat, _syncService);
+                return new AdbFileInfo(path, stat, _syncService, _semaphore);
             }
             finally
             {
