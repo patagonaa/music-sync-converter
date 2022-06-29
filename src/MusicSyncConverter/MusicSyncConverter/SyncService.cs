@@ -547,7 +547,7 @@ namespace MusicSyncConverter
                             }
                             catch (Exception ex)
                             {
-                                infoLogMessages.Append($"{workItem.SourceFileInfo.Path}: {ex}");
+                                infoLogMessages.TryAdd($"{workItem.SourceFileInfo.Path}: {ex}");
                                 return null;
                             }
                             var outFilePath = Path.ChangeExtension(workItem.TargetFilePath, outputExtension);

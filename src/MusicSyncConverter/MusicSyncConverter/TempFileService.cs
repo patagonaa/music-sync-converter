@@ -18,6 +18,10 @@ namespace MusicSyncConverter
 
         public void CleanupTempDir(CancellationToken cancellationToken)
         {
+            if (!Directory.Exists(_tempPath))
+            {
+                return;
+            }
             var thresholdDate = DateTime.UtcNow - TimeSpan.FromDays(1);
             foreach (var file in Directory.GetFiles(_tempPath, "*", SearchOption.AllDirectories))
             {
