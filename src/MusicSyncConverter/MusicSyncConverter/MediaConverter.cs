@@ -70,14 +70,15 @@ namespace MusicSyncConverter
 
             var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
 
-            if (overrides.Any())
-            {
-                var mergedOverrides = MergeLimitations(overrides);
-                encoderInfo = ApplyLimitation(config.DeviceConfig.FallbackFormat, mergedOverrides);
-            }
-            else if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
+            var additionalLimitation = overrides.Any() ? MergeLimitations(overrides) : null;
+
+            if ((additionalLimitation == null || IsWithinLimitations(additionalLimitation, sourceExtension, audioStream)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
                 encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
+            }
+            else if (additionalLimitation != null)
+            {
+                encoderInfo = ApplyLimitation(config.DeviceConfig.FallbackFormat, additionalLimitation);
             }
             else
             {
