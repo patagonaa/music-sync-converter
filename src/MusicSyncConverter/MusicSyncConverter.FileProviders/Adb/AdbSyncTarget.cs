@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,12 +24,24 @@ namespace MusicSyncConverter.FileProviders.Adb
         {
             _adbClient = new AdbClient();
             var devices = _adbClient.GetDevices();
-            var device = devices.FirstOrDefault(x => x.Serial == serial);
+            var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
             if (device == null)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
             _device = device;
             _syncService = new SyncService(_adbClient, _device);
             _basePath = basePath;
+        }
+
+        private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
+
+        private bool IsRequestedDevice(DeviceData device, string serial)
+        {
+            if (device.Serial == serial)
+                return true;
+            var match = _adbTcpSerialRegex.Match(device.Serial);
+            if (match.Success && match.Groups["serial"].Value == serial)
+                return true;
+            return false;
         }
 
         public Task Complete(CancellationToken cancellationToken)
