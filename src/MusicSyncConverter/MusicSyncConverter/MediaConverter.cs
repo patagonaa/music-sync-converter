@@ -278,7 +278,7 @@ namespace MusicSyncConverter
                     (supportedFormat.Profile == null || supportedFormat.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
                     (supportedFormat.MaxChannels == null || supportedFormat.MaxChannels >= audioStream.Channels) &&
                     (supportedFormat.MaxSampleRateHz == null || supportedFormat.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                    (supportedFormat.MaxBitrate == null || supportedFormat.MaxBitrate >= audioStream.BitRate))
+                    (supportedFormat.MaxBitrate == null || supportedFormat.MaxBitrate >= (audioStream.BitRate / 1000)))
                 {
                     return true;
                 }
