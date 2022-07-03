@@ -72,8 +72,8 @@ namespace MusicSyncConverter
 
             if (overrides.Any())
             {
-                var mergedOverrides = MergeOverrides(overrides);
-                encoderInfo = ApplyOverrides(config.DeviceConfig.FallbackFormat, mergedOverrides);
+                var mergedOverrides = MergeLimitations(overrides);
+                encoderInfo = ApplyLimitation(config.DeviceConfig.FallbackFormat, mergedOverrides);
             }
             else if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
@@ -88,7 +88,7 @@ namespace MusicSyncConverter
             return (outputFile, encoderInfo.Extension);
         }
 
-        private EncoderInfo ApplyOverrides(EncoderInfo fallbackFormat, FileFormatLimitation toApply)
+        private EncoderInfo ApplyLimitation(EncoderInfo fallbackFormat, FileFormatLimitation toApply)
         {
             var toReturn = fallbackFormat.Clone();
             if (toApply.Extension != null && toApply.Extension != toReturn.Extension)
@@ -116,7 +116,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private FileFormatLimitation MergeOverrides(IReadOnlyList<FileFormatLimitation> overrides)
+        private FileFormatLimitation MergeLimitations(IReadOnlyList<FileFormatLimitation> overrides)
         {
             var toReturn = overrides[0].Clone();
 
@@ -126,7 +126,7 @@ namespace MusicSyncConverter
                 {
                     if (toReturn.Extension != null && toReturn.Extension != toApply.Extension)
                     {
-                        throw new InvalidOperationException("Another extension has already been set by another override");
+                        throw new InvalidOperationException("Multiple extension limitations can't be merged");
                     }
                     toReturn.Extension = toApply.Extension;
                 }
@@ -135,7 +135,7 @@ namespace MusicSyncConverter
                 {
                     if (toReturn.Codec != null && toReturn.Codec != toApply.Codec)
                     {
-                        throw new InvalidOperationException("Another codec has already been set by another override");
+                        throw new InvalidOperationException("Multiple codec limitations can't be merged");
                     }
                     toReturn.Codec = toApply.Codec;
                 }
@@ -144,7 +144,7 @@ namespace MusicSyncConverter
                 {
                     if (toReturn.Profile != null && toReturn.Profile != toApply.Profile)
                     {
-                        throw new InvalidOperationException("Another profile has already been set by another override");
+                        throw new InvalidOperationException("Multiple profile limitations can't be merged");
                     }
                     toReturn.Profile = toApply.Profile;
                 }
@@ -273,17 +273,22 @@ namespace MusicSyncConverter
         {
             foreach (var supportedFormat in supportedFormats)
             {
-                if ((supportedFormat.Extension == null || supportedFormat.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
-                    (supportedFormat.Codec == null || supportedFormat.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
-                    (supportedFormat.Profile == null || supportedFormat.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
-                    (supportedFormat.MaxChannels == null || supportedFormat.MaxChannels >= audioStream.Channels) &&
-                    (supportedFormat.MaxSampleRateHz == null || supportedFormat.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                    (supportedFormat.MaxBitrate == null || supportedFormat.MaxBitrate >= (audioStream.BitRate / 1000)))
+                if (IsWithinLimitations(supportedFormat, sourceExtension, audioStream))
                 {
                     return true;
                 }
             }
             return false;
+        }
+
+        private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, AudioStream audioStream)
+        {
+            return (limitation.Extension == null || limitation.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
+                                (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
+                                (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
+                                (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
+                                (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
+                                (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate / 1000));
         }
 
         private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
