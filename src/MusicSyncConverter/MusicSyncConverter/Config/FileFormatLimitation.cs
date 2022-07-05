@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace MusicSyncConverter.Config
+﻿namespace MusicSyncConverter.Config
 {
     public class FileFormatLimitation
     {

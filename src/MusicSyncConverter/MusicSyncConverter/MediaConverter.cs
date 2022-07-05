@@ -68,17 +68,17 @@ namespace MusicSyncConverter
 
             EncoderInfo encoderInfo;
 
-            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatLimitation>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
+            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
 
-            var additionalLimitation = overrides.Any() ? MergeLimitations(overrides) : null;
+            var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
-            if ((additionalLimitation == null || IsWithinLimitations(additionalLimitation, sourceExtension, audioStream)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
+            if ((mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, audioStream)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
             {
                 encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
             }
-            else if (additionalLimitation != null)
+            else if (mergedOverrides != null)
             {
-                encoderInfo = ApplyLimitation(config.DeviceConfig.FallbackFormat, additionalLimitation);
+                encoderInfo = GetEncoderInfoOverride(config.DeviceConfig.FallbackFormat, mergedOverrides);
             }
             else
             {
@@ -89,7 +89,7 @@ namespace MusicSyncConverter
             return (outputFile, encoderInfo.Extension);
         }
 
-        private EncoderInfo ApplyLimitation(EncoderInfo fallbackFormat, FileFormatLimitation toApply)
+        private EncoderInfo GetEncoderInfoOverride(EncoderInfo fallbackFormat, FileFormatOverride toApply)
         {
             var toReturn = fallbackFormat.Clone();
             if (toApply.Extension != null && toApply.Extension != toReturn.Extension)
@@ -105,6 +105,10 @@ namespace MusicSyncConverter
             {
                 toReturn.Profile = toApply.Profile;
             }
+            if (toApply.Muxer != null && toApply.Muxer != toReturn.Muxer)
+            {
+                toReturn.Muxer = toApply.Muxer;
+            }
             if (toApply.MaxChannels != null && (toReturn.Channels == null || toReturn.Channels > toApply.MaxChannels))
                 toReturn.Channels = toApply.MaxChannels;
 
@@ -117,7 +121,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private FileFormatLimitation MergeLimitations(IReadOnlyList<FileFormatLimitation> overrides)
+        private FileFormatOverride MergeOverrides(IReadOnlyList<FileFormatOverride> overrides)
         {
             var toReturn = overrides[0].Clone();
 
@@ -148,6 +152,15 @@ namespace MusicSyncConverter
                         throw new InvalidOperationException("Multiple profile limitations can't be merged");
                     }
                     toReturn.Profile = toApply.Profile;
+                }
+
+                if (toApply.Muxer != null)
+                {
+                    if (toReturn.Muxer != null && toReturn.Muxer != toApply.Muxer)
+                    {
+                        throw new InvalidOperationException("Multiple muxer limitations can't be merged");
+                    }
+                    toReturn.Muxer = toApply.Muxer;
                 }
 
                 if (toApply.MaxChannels != null && (toReturn.MaxChannels == null || toReturn.MaxChannels > toApply.MaxChannels))
