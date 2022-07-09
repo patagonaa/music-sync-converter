@@ -1,7 +1,7 @@
 ﻿using MusicSyncConverter.Models;
 using System.Collections.Generic;
 
-namespace MusicSyncConverter
+namespace MusicSyncConverter.Playlists
 {
     internal class Playlist
     {

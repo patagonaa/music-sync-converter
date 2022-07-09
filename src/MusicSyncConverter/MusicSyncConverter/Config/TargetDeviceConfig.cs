@@ -1,4 +1,4 @@
-﻿using MusicSyncConverter.Models;
+﻿using MusicSyncConverter.Conversion;
 using System.Collections.Generic;
 
 namespace MusicSyncConverter.Config

@@ -1,6 +1,6 @@
 ﻿using MusicSyncConverter.Config;
 
-namespace MusicSyncConverter.Models
+namespace MusicSyncConverter.Conversion
 {
     public class FileFormatOverride : FileFormatLimitation
     {
@@ -8,7 +8,7 @@ namespace MusicSyncConverter.Models
 
         public new FileFormatOverride Clone()
         {
-            return (FileFormatOverride)this.MemberwiseClone();
+            return (FileFormatOverride)MemberwiseClone();
         }
     }
 }

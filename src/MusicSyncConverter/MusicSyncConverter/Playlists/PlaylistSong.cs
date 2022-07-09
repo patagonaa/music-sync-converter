@@ -1,4 +1,4 @@
-﻿namespace MusicSyncConverter
+﻿namespace MusicSyncConverter.Playlists
 {
     public class PlaylistSong
     {

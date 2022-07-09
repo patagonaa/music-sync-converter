@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MusicSyncConverter.Models
+namespace MusicSyncConverter.Conversion
 {
     public class EncoderInfo
     {
@@ -17,7 +17,7 @@ namespace MusicSyncConverter.Models
 
         public EncoderInfo Clone()
         {
-            return (EncoderInfo)this.MemberwiseClone();
+            return (EncoderInfo)MemberwiseClone();
         }
     }
 }

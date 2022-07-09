@@ -1,4 +1,4 @@
-﻿namespace MusicSyncConverter.Models
+﻿namespace MusicSyncConverter.Conversion
 {
     public enum ConvertActionType
     {

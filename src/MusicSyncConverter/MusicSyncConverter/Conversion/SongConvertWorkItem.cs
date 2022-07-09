@@ -1,4 +1,6 @@
-﻿namespace MusicSyncConverter.Models
+﻿using MusicSyncConverter.Models;
+
+namespace MusicSyncConverter.Conversion
 {
     public class SongConvertWorkItem
     {

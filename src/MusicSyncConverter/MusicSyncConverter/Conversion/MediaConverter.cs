@@ -2,7 +2,6 @@
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
 using MusicSyncConverter.Config;
-using MusicSyncConverter.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,7 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MusicSyncConverter
+namespace MusicSyncConverter.Conversion
 {
     class MediaConverter
     {
@@ -302,7 +301,7 @@ namespace MusicSyncConverter
                                 (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
                                 (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
                                 (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                                (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate / 1000));
+                                (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
         }
 
         private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)

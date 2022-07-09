@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.FileProviders;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Conversion;
 using MusicSyncConverter.FileProviders;
 using MusicSyncConverter.FileProviders.Abstractions;
 using MusicSyncConverter.Models;
+using MusicSyncConverter.Playlists;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
