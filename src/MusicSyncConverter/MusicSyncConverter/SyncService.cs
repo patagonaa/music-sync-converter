@@ -422,8 +422,6 @@ namespace MusicSyncConverter
                 }
 
                 var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
-                if (hasUnsupportedChars)
-                    infoLogMessages.TryAdd($"Unsupported chars in path: {syncInfo.TargetPath}");
 
                 var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
 
@@ -439,6 +437,9 @@ namespace MusicSyncConverter
                 }
                 else
                 {
+                    if (hasUnsupportedChars)
+                        infoLogMessages.TryAdd($"Unsupported chars in path: {syncInfo.TargetPath}");
+
                     // zero or multiple target files, so just replace it
                     yield return new SongReadWorkItem
                     {
