@@ -2,6 +2,7 @@
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Tags;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -14,30 +15,22 @@ namespace MusicSyncConverter.Conversion
 {
     class MediaConverter
     {
+        private readonly TextSanitizer _sanitizer;
+        private readonly PathMatcher _pathMatcher;
+        private readonly List<ITagReader> _tagReaders;
+        private readonly List<ITagWriter> _tagWriters;
+        private readonly FfmpegTagReader _ffmpegTagReader;
+        private readonly ITempFileSession _tempFileSession;
+
         public MediaConverter(ITempFileSession tempFileSession)
         {
             _sanitizer = new TextSanitizer();
             _pathMatcher = new PathMatcher();
+            _tagReaders = new List<ITagReader> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
+            _tagWriters = new List<ITagWriter> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
+            _ffmpegTagReader = new FfmpegTagReader();
             _tempFileSession = tempFileSession;
         }
-
-        private readonly TextSanitizer _sanitizer;
-        private readonly PathMatcher _pathMatcher;
-        private readonly ITempFileSession _tempFileSession;
-
-        private static readonly IReadOnlyList<string> _supportedTags = new List<string>
-        {
-            "album",
-            "title",
-            "composer",
-            "genre",
-            "track",
-            "disc",
-            "date",
-            "artist",
-            "album_artist",
-            "comment"
-        };
 
         public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
@@ -58,7 +51,10 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Error during FFProbe: " + ex);
             }
 
-            var tags = MapTags(mediaAnalysis, originalFilePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
+            var rawTags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, cancellationToken);
+
+            var sanitizedTags = SanitizeTags(rawTags, originalFilePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
+            var ffmpegTags = MapToFfmpegTags(sanitizedTags);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
@@ -87,7 +83,12 @@ namespace MusicSyncConverter.Conversion
             }
 
             var outputFile = _tempFileSession.GetTempFilePath();
-            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, tags, cancellationToken);
+            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
+
+            var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
+            if (tagWriter != null)
+                await tagWriter.SetTags(rawTags, outputFile, cancellationToken);
+
             return (outputFile, encoderInfo.Extension);
         }
 
@@ -253,28 +254,42 @@ namespace MusicSyncConverter.Conversion
             }
         }
 
-        private Dictionary<string, string> MapTags(IMediaAnalysis mediaAnalysis, string relativePath, CharacterLimitations? characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
+
+
+        private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, string originalPath, CharacterLimitations? characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
+        {
+            var toReturn = new List<KeyValuePair<string, string>>();
+            foreach (var tag in tags)
+            {
+                var tagValue = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
+                if (hasUnsupportedChars)
+                    infoLogMessages.TryAdd(GetUnsupportedStringsMessage(originalPath, tag.Value));
+                toReturn.Add(new KeyValuePair<string, string>(tag.Key, tagValue));
+            }
+
+            return toReturn;
+        }
+
+        private Dictionary<string, string> MapToFfmpegTags(IReadOnlyList<KeyValuePair<string, string>> tags)
         {
             var toReturn = new Dictionary<string, string>();
-            foreach (var tag in mediaAnalysis.Format.Tags ?? new Dictionary<string, string>())
+            foreach (var tag in tags)
             {
-                if (!_supportedTags.Contains(tag.Key, StringComparer.OrdinalIgnoreCase))
+                var ffmpegKey = FfmpegTagKeyMapping.GetFfmpegKey(tag.Key);
+                if (ffmpegKey == null)
                 {
+                    //TODO: Log
                     continue;
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
-                if (hasUnsupportedChars)
-                    infoLogMessages.TryAdd(GetUnsupportedStringsMessage(relativePath, tag.Value));
-            }
-            foreach (var tag in mediaAnalysis.PrimaryAudioStream?.Tags ?? new Dictionary<string, string>())
-            {
-                if (!_supportedTags.Contains(tag.Key, StringComparer.OrdinalIgnoreCase))
+
+                if (toReturn.TryGetValue(ffmpegKey, out var existingValue))
                 {
-                    continue;
+                    toReturn[ffmpegKey] = $"{existingValue};{tag.Value}";
                 }
-                toReturn[tag.Key] = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
-                if (hasUnsupportedChars)
-                    infoLogMessages.TryAdd(GetUnsupportedStringsMessage(relativePath, tag.Value));
+                else
+                {
+                    toReturn[ffmpegKey] = tag.Value;
+                }
             }
 
             return toReturn;

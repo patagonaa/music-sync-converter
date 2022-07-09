@@ -20,8 +20,25 @@ Works on Windows and Linux, macOS is untested.
 - order the FAT32 file table (for embedded devices that don't sort directories before playing)
 - normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
 
+## Installation
+### Dependencies:
+- required
+    - .NET 6 SDK
+    - ffmpeg (including ffprobe)
+- optional
+    - flac (including metaflac) to handle flac files with multiple tag values correctly
+    - vorbis-tools (including vorbiscomment) to handle ogg / opus files with multiple tag values correctly
+
+All of these should be installed so they are are in PATH.
+
+.NET SDK can be found at https://dotnet.microsoft.com/en-us/download for all platforms
+
+On Windows, you can get those at https://www.gyan.dev/ffmpeg/builds/ https://ftp.osuosl.org/pub/xiph/releases/flac/ https://ftp.osuosl.org/pub/xiph/releases/vorbis/ and add them to the PATH variable.
+
+On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac vorbis-tools`).
+
 ## Usage:
-`.\MusicSyncConverter.exe config.json`
+`dotnet run --project src\MusicSyncConverter\MusicSyncConverter -- config.json`
 
 You can split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
 
