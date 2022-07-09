@@ -115,7 +115,7 @@ namespace MusicSyncConverter
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock), workerOptions);
+                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock, infoLogMessages), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
@@ -282,7 +282,7 @@ namespace MusicSyncConverter
             return new Playlist(playlistFile, playlistSongs);
         }
 
-        private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo[]> songOutput)
+        private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo[]> songOutput, IProducerConsumerCollection<string> infoLogMessages)
         {
             try
             {
@@ -296,19 +296,27 @@ namespace MusicSyncConverter
 
                     var sourcePath = Path.Join(playlistDir, song.Path);
                     var songFileInfo = fileProvider.GetFileInfo(sourcePath);
-                    var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
-                    var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
-                    var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
-                    var syncInfo = new SongSyncInfo
+
+                    if (songFileInfo.Exists)
                     {
-                        SourceFileInfo = new SourceFileInfo
+                        var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
+                        var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
+                        var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
+                        var syncInfo = new SongSyncInfo
                         {
-                            Path = sourcePath,
-                            ModifiedDate = songFileInfo.LastModified
-                        },
-                        TargetPath = songTargetPath
-                    };
-                    await songOutput.SendAsync(new[] { syncInfo });
+                            SourceFileInfo = new SourceFileInfo
+                            {
+                                Path = sourcePath,
+                                ModifiedDate = songFileInfo.LastModified
+                            },
+                            TargetPath = songTargetPath
+                        };
+                        await songOutput.SendAsync(new[] { syncInfo });
+                    }
+                    else
+                    {
+                        infoLogMessages.TryAdd($"Missing song {sourcePath} referenced in playlist {playlist.PlaylistFileInfo.Path}");
+                    }
                     i++;
                 }
             }
