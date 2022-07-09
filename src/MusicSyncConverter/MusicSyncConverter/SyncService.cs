@@ -27,25 +27,25 @@ namespace MusicSyncConverter
         private readonly MediaConverter _converter;
         private readonly PathMatcher _pathMatcher;
         private readonly PlaylistParser _playlistParser;
-        private readonly TempFileService _tempFileService;
         private static readonly TimeSpan _fileTimestampDelta = TimeSpan.FromSeconds(2); // FAT32 write time has 2 seconds precision
+        private readonly ITempFileSession _tempFileSession;
 
-        public SyncService()
+        public SyncService(ITempFileSession tempFileSession)
         {
             _fileProviderFactory = new FileProviderFactory();
             _syncTargetFactory = new SyncTargetFactory();
             _sanitizer = new TextSanitizer();
-            _converter = new MediaConverter();
+            _converter = new MediaConverter(tempFileSession);
             _pathMatcher = new PathMatcher();
             _playlistParser = new PlaylistParser();
-            _tempFileService = new TempFileService();
+            _tempFileSession = tempFileSession;
         }
 
         public async Task Run(SyncConfig config, CancellationToken upstreamCancellationToken)
         {
             using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(upstreamCancellationToken);
             var cancellationToken = cancellationTokenSource.Token;
-            _tempFileService.CleanupTempDir(cancellationToken);
+
 
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
@@ -78,7 +78,6 @@ namespace MusicSyncConverter
             var infoLogMessages = new ConcurrentBag<string>();
 
             var fileProvider = _fileProviderFactory.Get(config.SourceDir);
-            using (var tempFileSession = _tempFileService.GetNewSession())
             using (fileProvider as IDisposable)
             {
                 var syncTarget = _syncTargetFactory.Get(config.TargetDir);
@@ -94,10 +93,10 @@ namespace MusicSyncConverter
                     var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                     // --- song handling ---
-                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => new[] { await ConvertSong(x, config, tempFileSession, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null)!, workerOptions);
+                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => new[] { await ConvertSong(x, config, infoLogMessages, handledFiles, cancellationToken) }.Where(y => y != null)!, workerOptions);
                     convertSongBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
-                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await ReadSong(x, tempFileSession, fileProvider, cancellationToken), readOptions);
+                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await ReadSong(x, fileProvider, cancellationToken), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(x => CompareSongDates(x, config, targetPathComparer, syncTarget, infoLogMessages), readOptions);
@@ -123,7 +122,7 @@ namespace MusicSyncConverter
                     }
                     else
                     {
-                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => new[] { await ConvertPlaylist(x, config, tempFileSession, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, infoLogMessages, cancellationToken) }.Where(x => x != null)!, workerOptions);
+                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => new[] { await ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, infoLogMessages, cancellationToken) }.Where(x => x != null)!, workerOptions);
                         readPlaylistBlock.LinkTo(convertPlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         convertPlaylistBlockSpecific.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
                         convertPlaylistBlock = convertPlaylistBlockSpecific;
@@ -329,7 +328,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task<OutputFile?> ConvertPlaylist(Playlist playlist, SyncConfig syncConfig, ITempFileSession tempFileSession, ISyncTarget syncTarget, PathComparer sourcePathComparer, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken handledFilesCompleteToken, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        private async Task<OutputFile?> ConvertPlaylist(Playlist playlist, SyncConfig syncConfig, ISyncTarget syncTarget, PathComparer sourcePathComparer, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken handledFilesCompleteToken, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
             var playlistFile = playlist.PlaylistFileInfo;
 
@@ -343,7 +342,7 @@ namespace MusicSyncConverter
 
             var allSongsFound = true;
 
-            var tmpFilePath = tempFileSession.GetTempFilePath();
+            var tmpFilePath = _tempFileSession.GetTempFilePath();
             using (var sw = File.CreateText(tmpFilePath))
             {
                 sw.NewLine = "\r\n";
@@ -467,7 +466,7 @@ namespace MusicSyncConverter
             return (dateTime - dateTime1).Duration() <= _fileTimestampDelta;
         }
 
-        private async Task<SongConvertWorkItem> ReadSong(SongReadWorkItem workItem, ITempFileSession tempFileSession, IFileProvider fileProvider, CancellationToken cancellationToken)
+        private async Task<SongConvertWorkItem> ReadSong(SongReadWorkItem workItem, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
             SongConvertWorkItem toReturn;
             switch (workItem.ActionType)
@@ -487,12 +486,12 @@ namespace MusicSyncConverter
                     string tmpFilePath;
                     using (var inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.Path).CreateReadStream())
                     {
-                        (tmpFilePath, fileSize) = await tempFileSession.CopyToTempFile(inFile, cancellationToken);
+                        (tmpFilePath, fileSize) = await _tempFileSession.CopyToTempFile(inFile, cancellationToken);
                     }
                     sw.Stop();
 
                     string directoryPath = Path.GetDirectoryName(workItem.SourceFileInfo.Path) ?? throw new ArgumentException("DirectoryName is null");
-                    string? albumCoverPath = await GetAlbumCoverPath(directoryPath, tempFileSession, fileProvider, cancellationToken);
+                    string? albumCoverPath = await GetAlbumCoverPath(directoryPath, fileProvider, cancellationToken);
 
                     toReturn = new SongConvertWorkItem
                     {
@@ -510,7 +509,7 @@ namespace MusicSyncConverter
             return toReturn;
         }
 
-        private static async Task<string?> GetAlbumCoverPath(string dirPath, ITempFileSession tempFileSession, IFileProvider fileProvider, CancellationToken cancellationToken)
+        private async Task<string?> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
             var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
             foreach (var coverVariant in coverVariants)
@@ -527,7 +526,7 @@ namespace MusicSyncConverter
                     {
                         using (var coverStream = coverFileInfo.CreateReadStream())
                         {
-                            var (path, _) = await tempFileSession.CopyToTempFile(coverStream, cancellationToken);
+                            var (path, _) = await _tempFileSession.CopyToTempFile(coverStream, cancellationToken);
                             return path;
                         }
                     }
@@ -536,7 +535,7 @@ namespace MusicSyncConverter
             return null;
         }
 
-        private async Task<OutputFile?> ConvertSong(SongConvertWorkItem workItem, SyncConfig config, ITempFileSession tempFileSession, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken cancellationToken)
+        private async Task<OutputFile?> ConvertSong(SongConvertWorkItem workItem, SyncConfig config, IProducerConsumerCollection<string> infoLogMessages, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
@@ -550,11 +549,11 @@ namespace MusicSyncConverter
                             var sw = Stopwatch.StartNew();
                             Console.WriteLine($"--> Convert {workItem.SourceFileInfo.Path}");
 
-                            var outFile = tempFileSession.GetTempFilePath();
+                            string outFile;
                             string outputExtension;
                             try
                             {
-                                (_, outputExtension) = await _converter.RemuxOrConvert(config, workItem.SourceTempFilePath, workItem.SourceFileInfo.Path, workItem.AlbumArtPath, outFile, infoLogMessages, cancellationToken);
+                                (outFile, outputExtension) = await _converter.RemuxOrConvert(config, workItem.SourceTempFilePath, workItem.SourceFileInfo.Path, workItem.AlbumArtPath, infoLogMessages, cancellationToken);
                             }
                             catch (Exception ex)
                             {

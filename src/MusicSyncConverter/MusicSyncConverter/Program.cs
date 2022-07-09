@@ -37,10 +37,15 @@ namespace MusicSyncConverter
 
             Console.CancelKeyPress += (o, e) => { cts.Cancel(); e.Cancel = true; };
 
-            var service = new SyncService();
             try
             {
-                await service.Run(config, cts.Token);
+                var tempFileService = new TempFileService();
+                tempFileService.CleanupTempDir(cts.Token);
+                using (var tempFileSession = tempFileService.GetNewSession())
+                {
+                    var service = new SyncService(tempFileSession);
+                    await service.Run(config, cts.Token);
+                }
             }
             catch (OperationCanceledException)
             {

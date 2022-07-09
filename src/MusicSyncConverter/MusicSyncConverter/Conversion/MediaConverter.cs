@@ -14,14 +14,16 @@ namespace MusicSyncConverter.Conversion
 {
     class MediaConverter
     {
-        public MediaConverter()
+        public MediaConverter(ITempFileSession tempFileSession)
         {
             _sanitizer = new TextSanitizer();
             _pathMatcher = new PathMatcher();
+            _tempFileSession = tempFileSession;
         }
 
         private readonly TextSanitizer _sanitizer;
         private readonly PathMatcher _pathMatcher;
+        private readonly ITempFileSession _tempFileSession;
 
         private static readonly IReadOnlyList<string> _supportedTags = new List<string>
         {
@@ -37,7 +39,7 @@ namespace MusicSyncConverter.Conversion
             "comment"
         };
 
-        public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, string outputFile, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
+        public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, IProducerConsumerCollection<string> infoLogMessages, CancellationToken cancellationToken)
         {
             var sourceExtension = Path.GetExtension(originalFilePath);
 
@@ -84,6 +86,7 @@ namespace MusicSyncConverter.Conversion
                 encoderInfo = config.DeviceConfig.FallbackFormat;
             }
 
+            var outputFile = _tempFileSession.GetTempFilePath();
             await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, tags, cancellationToken);
             return (outputFile, encoderInfo.Extension);
         }
