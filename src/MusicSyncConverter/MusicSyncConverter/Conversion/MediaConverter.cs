@@ -53,7 +53,7 @@ namespace MusicSyncConverter.Conversion
 
             var rawTags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, cancellationToken);
 
-            var sanitizedTags = SanitizeTags(rawTags, originalFilePath, config.DeviceConfig.CharacterLimitations, infoLogMessages);
+            var sanitizedTags = SanitizeTags(rawTags, originalFilePath, config.DeviceConfig.CharacterLimitations, config.DeviceConfig.TagValueDelimiter, infoLogMessages);
             var ffmpegTags = MapToFfmpegTags(sanitizedTags);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
@@ -87,7 +87,7 @@ namespace MusicSyncConverter.Conversion
 
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
             if (tagWriter != null)
-                await tagWriter.SetTags(rawTags, outputFile, cancellationToken);
+                await tagWriter.SetTags(sanitizedTags, outputFile, cancellationToken);
 
             return (outputFile, encoderInfo.Extension);
         }
@@ -256,9 +256,17 @@ namespace MusicSyncConverter.Conversion
 
 
 
-        private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, string originalPath, CharacterLimitations? characterLimitations, IProducerConsumerCollection<string> infoLogMessages)
+        private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, string originalPath, CharacterLimitations? characterLimitations, string? tagValueDelimiter, IProducerConsumerCollection<string> infoLogMessages)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
+            if (tagValueDelimiter != null)
+            {
+                tags = tags
+                    .GroupBy(tag => tag.Key)
+                    .Select(tagGroup => new KeyValuePair<string, string>(tagGroup.Key, string.Join(tagValueDelimiter, tagGroup.Select(tag => tag.Value))))
+                    .ToList();
+            }
+
             foreach (var tag in tags)
             {
                 var tagValue = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);

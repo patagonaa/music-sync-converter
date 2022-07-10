@@ -9,5 +9,6 @@ namespace MusicSyncConverter.Config
         public EncoderInfo FallbackFormat { get; set; } = null!;
         public CharacterLimitations? CharacterLimitations { get; set; }
         public bool ResolvePlaylists { get; set; } = false;
+        public string? TagValueDelimiter { get; set; }
     }
 }

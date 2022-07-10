@@ -116,6 +116,7 @@
             "NormalizeCase": true,
             "NormalizationMode": "Unsupported"
         },
-        "ResolvePlaylists": true
+        "ResolvePlaylists": true,
+        "TagValueDelimiter": ";"
     }
 }

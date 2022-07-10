@@ -80,6 +80,7 @@
             ],
             "NormalizationMode": "Unsupported"
         },
-        "ResolvePlaylists": true
+        "ResolvePlaylists": true,
+        "TagValueDelimiter": ";"
     }
 }

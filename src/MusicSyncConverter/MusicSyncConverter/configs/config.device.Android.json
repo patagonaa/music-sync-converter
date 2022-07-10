@@ -52,6 +52,7 @@
             "MaxCoverSize": 512,
             "Channels": 2
         },
-        "ResolvePlaylists": false
+        "ResolvePlaylists": false,
+        "TagValueDelimiter": ";"
     }
 }
