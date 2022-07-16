@@ -53,7 +53,7 @@ namespace MusicSyncConverter.Conversion
 
             var rawTags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, cancellationToken);
 
-            var sanitizedTags = SanitizeTags(rawTags, originalFilePath, config.DeviceConfig.CharacterLimitations, config.DeviceConfig.TagValueDelimiter, infoLogMessages);
+            var sanitizedTags = SanitizeTags(rawTags, originalFilePath, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter, infoLogMessages);
             var ffmpegTags = MapToFfmpegTags(sanitizedTags);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;

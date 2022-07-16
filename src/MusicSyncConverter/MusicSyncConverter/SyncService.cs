@@ -332,7 +332,7 @@ namespace MusicSyncConverter
         {
             var playlistFile = playlist.PlaylistFileInfo;
 
-            var playlistPath = _sanitizer.SanitizeText(syncConfig.DeviceConfig.CharacterLimitations, playlistFile.Path, true, out _);
+            var playlistPath = _sanitizer.SanitizeText(syncConfig.DeviceConfig.PathCharacterLimitations, playlistFile.Path, true, out _);
             var targetPlaylistFileInfo = syncTarget.GetFileInfo(playlistPath);
             if (targetPlaylistFileInfo.Exists && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
             {
@@ -377,7 +377,7 @@ namespace MusicSyncConverter
                         continue;
 
                     string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
-                    sw.WriteLine($"#EXTINF:0,{_sanitizer.SanitizeText(syncConfig.DeviceConfig.CharacterLimitations, songName, false, out _)}");
+                    sw.WriteLine($"#EXTINF:0,{_sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)}");
                     sw.WriteLine(Path.GetRelativePath(playlistDirectoryPath, targetFilePath));
                 }
             }
@@ -407,7 +407,7 @@ namespace MusicSyncConverter
                 yield break;
             var exampleSyncInfo = syncInfos[0];
 
-            var targetDirPath = Path.GetDirectoryName(_sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, exampleSyncInfo.TargetPath, true, out _)) ?? throw new ArgumentException("DirectoryName is null");
+            var targetDirPath = Path.GetDirectoryName(_sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, exampleSyncInfo.TargetPath, true, out _)) ?? throw new ArgumentException("DirectoryName is null");
 
             var directoryContents = syncTarget.GetDirectoryContents(targetDirPath);
             var files = directoryContents.ToList();
@@ -422,7 +422,7 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.CharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
+                var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
 
                 var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
 

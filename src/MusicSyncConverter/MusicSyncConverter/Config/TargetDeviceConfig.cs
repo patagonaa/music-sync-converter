@@ -7,7 +7,16 @@ namespace MusicSyncConverter.Config
     {
         public IList<FileFormatLimitation> SupportedFormats { get; set; } = null!;
         public EncoderInfo FallbackFormat { get; set; } = null!;
-        public CharacterLimitations? CharacterLimitations { get; set; }
+        public CharacterLimitations? CharacterLimitations
+        {
+            set
+            {
+                PathCharacterLimitations = value;
+                TagCharacterLimitations = value;
+            }
+        }
+        public CharacterLimitations? PathCharacterLimitations { get; set; }
+        public CharacterLimitations? TagCharacterLimitations { get; set; }
         public bool ResolvePlaylists { get; set; } = false;
         public string? TagValueDelimiter { get; set; }
     }

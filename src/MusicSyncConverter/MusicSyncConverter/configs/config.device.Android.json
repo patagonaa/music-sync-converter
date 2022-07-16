@@ -1,8 +1,9 @@
 {
     "DeviceConfig": {
-        "CharacterLimitations": {
+        "PathCharacterLimitations": {
             "NormalizationMode": "NonBmp" // Android does not want to read/write non UCS-2 characters on sd cards
         },
+        "TagCharacterLimitations": null,
         "SupportedFormats": [
             {
                 "Extension": ".mp3",

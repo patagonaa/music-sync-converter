@@ -136,8 +136,9 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
 - Copy all MP3, WMA and AAC-LC files
 - Convert all other files to AAC-LC 192kbit/s
 - Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
-- Replace unsupported characters (in directory and file names, and tag values)
-- Replace non-BMP characters (characters that can't be represented with UCS-2) (required for Android devices)
+- Replace unsupported characters in path names
+- Replace non-BMP characters in path names (characters that can't be represented with UCS-2) (required for Android devices)
+- Keep all characters in tags as they are
 - Change every first character of file/dir names to uppercase so devices that sort case-sensitive work properly
 - Resolve playlists to directories
 - Override codec settings for  `Z:\Audio\Audio Books` so all audio books are converted to 64kbit/s mono to save storage space
@@ -181,41 +182,18 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
             "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
             "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)
         },
-        "CharacterLimitations": { // omit this if your device supports unicode
+        "PathCharacterLimitations": { // omit this if your device supports unicode
             "SupportedChars": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-_ (),'[]!&", // all natively supported characters
             "Replacements": [ // characters that should be replaced by different characters
                 {
-                    "Char": "ä",
-                    "Replacement": "ae"
-                },
-                {
-                    "Char": "Ä",
-                    "Replacement": "Ae"
-                },
-                {
-                    "Char": "ö",
-                    "Replacement": "oe"
-                },
-                {
-                    "Char": "Ö",
-                    "Replacement": "Oe"
-                },
-                {
-                    "Char": "ü",
-                    "Replacement": "ue"
-                },
-                {
-                    "Char": "Ü",
-                    "Replacement": "Ue"
-                },
-                {
-                    "Char": "ß",
-                    "Replacement": "ss"
+                    "Char": "…",
+                    "Replacement": "..."
                 }
             ],
             "NormalizationMode": "NonBmp", // can be "None", "NonBmp", "Unsupported", "All"
             "NormalizeCase": true // change every first character of file/dir names to uppercase
         },
+        "TagCharacterLimitations": null
         "ResolvePlaylists": true // convert playlists to directories with the respective files
     },
     "PathFormatOverrides": {
