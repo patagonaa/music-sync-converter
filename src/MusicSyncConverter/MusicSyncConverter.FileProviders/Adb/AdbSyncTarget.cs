@@ -4,6 +4,7 @@ using MusicSyncConverter.FileProviders.Abstractions;
 using SharpAdbClient;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -92,22 +93,6 @@ namespace MusicSyncConverter.FileProviders.Adb
             }
         }
 
-        private class SyncTargetShellOutputReceiver : IShellOutputReceiver
-        {
-            public bool ParsesErrors => false;
-
-            public IList<string> Lines { get; private set; } = new List<string>();
-
-            public void AddOutput(string line)
-            {
-                Lines.Add(line);
-            }
-
-            public void Flush()
-            {
-            }
-        }
-
         private string EscapeFilename(string path)
         {
             return $"\"`echo {Convert.ToBase64String(AdbClient.Encoding.GetBytes(path))} | base64 -d`\"";
@@ -174,6 +159,11 @@ namespace MusicSyncConverter.FileProviders.Adb
             try
             {
                 _syncService.Push(content, path, 660, modified ?? DateTimeOffset.Now, null, cancellationToken);
+                var receiver = new SyncTargetShellOutputReceiver();
+                var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
+                var command = $"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d '{fileUrl}'";
+                await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                Debug.WriteLine(receiver.ToString());
             }
             finally
             {
@@ -186,6 +176,27 @@ namespace MusicSyncConverter.FileProviders.Adb
             return path
                 .Replace(Path.DirectorySeparatorChar, '/')
                 .Replace(Path.AltDirectorySeparatorChar, '/');
+        }
+
+        private class SyncTargetShellOutputReceiver : IShellOutputReceiver
+        {
+            public bool ParsesErrors => false;
+
+            public IList<string> Lines { get; private set; } = new List<string>();
+
+            public void AddOutput(string line)
+            {
+                Lines.Add(line);
+            }
+
+            public void Flush()
+            {
+            }
+
+            public override string ToString()
+            {
+                return string.Join(Environment.NewLine, Lines);
+            }
         }
     }
 }
