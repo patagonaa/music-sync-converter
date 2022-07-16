@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MusicSyncConverter.Tags
 {
@@ -29,7 +27,7 @@ namespace MusicSyncConverter.Tags
 
         public static string? GetFfmpegKey(string vorbisKey)
         {
-            return _ffmpegToVorbis.FirstOrDefault(x => x.Value.Equals(vorbisKey, StringComparison.OrdinalIgnoreCase)).Value;
+            return _ffmpegToVorbis.FirstOrDefault(x => x.Value.Equals(vorbisKey, StringComparison.OrdinalIgnoreCase)).Key;
         }
     }
 }
