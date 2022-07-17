@@ -9,6 +9,10 @@ namespace MusicSyncConverter.Config
         public EncoderInfo FallbackFormat { get; set; } = null!;
         public CharacterLimitations? CharacterLimitations
         {
+            get
+            {
+                return PathCharacterLimitations == TagCharacterLimitations ? PathCharacterLimitations : null;
+            }
             set
             {
                 PathCharacterLimitations = value;
