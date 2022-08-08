@@ -21,6 +21,7 @@ namespace MusicSyncConverter.Conversion
         private readonly List<ITagReader> _tagReaders;
         private readonly List<ITagWriter> _tagWriters;
         private readonly FfmpegTagReader _ffmpegTagReader;
+        private readonly FfmpegTagMapper _ffmpegTagMapper;
         private readonly ITempFileSession _tempFileSession;
         private readonly ILogger _logger;
 
@@ -31,6 +32,7 @@ namespace MusicSyncConverter.Conversion
             _tagReaders = new List<ITagReader> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
             _tagWriters = new List<ITagWriter> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
             _ffmpegTagReader = new FfmpegTagReader(logger);
+            _ffmpegTagMapper = new FfmpegTagMapper(logger);
             _tempFileSession = tempFileSession;
             _logger = logger;
         }
@@ -54,10 +56,9 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Error during FFProbe: " + ex);
             }
 
-            var tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, cancellationToken);
+            var tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceExtension, cancellationToken);
             tags = FilterTags(tags);
             tags = SanitizeTags(tags, originalFilePath, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
-            var ffmpegTags = MapToFfmpegTags(tags);
 
             var audioStream = mediaAnalysis.PrimaryAudioStream;
 
@@ -86,9 +87,12 @@ namespace MusicSyncConverter.Conversion
             }
 
             var outputFile = _tempFileSession.GetTempFilePath();
-            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
 
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
+
+            var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
+            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
+
             if (tagWriter != null)
                 await tagWriter.SetTags(tags, outputFile, cancellationToken);
 
@@ -274,8 +278,6 @@ namespace MusicSyncConverter.Conversion
             }
         }
 
-
-
         private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, string originalPath, CharacterLimitations? characterLimitations, string? tagValueDelimiter)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
@@ -293,56 +295,6 @@ namespace MusicSyncConverter.Conversion
                 if (hasUnsupportedChars)
                     _logger.LogInformation(GetUnsupportedStringsMessage(originalPath, tag.Value));
                 toReturn.Add(new KeyValuePair<string, string>(tag.Key, tagValue));
-            }
-
-            return toReturn;
-        }
-
-        private Dictionary<string, string> MapToFfmpegTags(IReadOnlyList<KeyValuePair<string, string>> tags)
-        {
-            var toReturn = new Dictionary<string, string>();
-            foreach (var tag in tags)
-            {
-                string tagKey;
-                string tagValue;
-                switch (tag.Key.ToUpperInvariant())
-                {
-                    case "TRACKNUMBER":
-                        var totalTracks = tags.FirstOrDefault(x => x.Key.Equals("TOTALTRACKS", StringComparison.OrdinalIgnoreCase) || x.Key.Equals("TRACKTOTAL", StringComparison.OrdinalIgnoreCase));
-                        tagKey = "track";
-                        tagValue = totalTracks.Value != null ? $"{tag.Value}/{totalTracks.Value}" : tag.Value;
-                        break;
-                    case "TOTALTRACKS":
-                    case "TRACKTOTAL":
-                        continue;
-                    case "DISCNUMBER":
-                        var totalDiscs = tags.FirstOrDefault(x => x.Key.Equals("TOTALDISCS", StringComparison.OrdinalIgnoreCase) || x.Key.Equals("DISCTOTAL", StringComparison.OrdinalIgnoreCase));
-                        tagKey = "disc";
-                        tagValue = totalDiscs.Value != null ? $"{tag.Value}/{totalDiscs.Value}" : tag.Value;
-                        break;
-                    case "TOTALDISCS":
-                    case "DISCTOTAL":
-                        continue;
-                    default:
-                        var ffmpegKey = FfmpegTagKeyMapping.GetFfmpegKey(tag.Key);
-                        if (ffmpegKey == null)
-                        {
-                            _logger.LogInformation("Could not map Vorbis key {VorbisKey} to FFMPEG key", tag.Key);
-                            continue;
-                        }
-                        tagKey = ffmpegKey;
-                        tagValue = tag.Value;
-                        break;
-                }
-
-                if (toReturn.TryGetValue(tagKey, out var existingValue))
-                {
-                    toReturn[tagKey] = $"{existingValue};{tagValue}";
-                }
-                else
-                {
-                    toReturn[tagKey] = tagValue;
-                }
             }
 
             return toReturn;
@@ -375,7 +327,7 @@ namespace MusicSyncConverter.Conversion
                                 (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
         }
 
-        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string> tags, CancellationToken cancellationToken)
+        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
         {
             var args = FFMpegArguments
                 .FromFileInput(sourcePath);
@@ -420,9 +372,12 @@ namespace MusicSyncConverter.Conversion
                     x.WithArgument(new CustomArgument($"-profile:a {encoderInfo.Profile}"));
                 }
                 x.WithoutMetadata();
-                foreach (var tag in tags)
+                if (tags != null)
                 {
-                    x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
+                    foreach (var tag in tags)
+                    {
+                        x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
+                    }
                 }
 
                 if (!string.IsNullOrEmpty(encoderInfo.CoverCodec))

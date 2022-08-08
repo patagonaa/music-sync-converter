@@ -20,7 +20,7 @@ namespace MusicSyncConverter.Tags
             _tempFileSession = tempFileSession;
         }
 
-        public async Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(IMediaAnalysis mediaAnalysis, string fileName, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(IMediaAnalysis mediaAnalysis, string fileName, string fileExtension, CancellationToken cancellationToken)
         {
             var tagFile = _tempFileSession.GetTempFilePath();
             await ExportTags(tagFile, fileName, cancellationToken);
