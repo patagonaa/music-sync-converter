@@ -13,6 +13,7 @@ namespace MusicSyncConverter.Tags
     internal abstract class VorbisCommentReaderWriterBase : ITagReader, ITagWriter
     {
         protected readonly ITempFileSession _tempFileSession;
+        private readonly Regex _keyValueRegex = new Regex("^([a-zA-Z ]+)=(.+)$");
 
         public VorbisCommentReaderWriterBase(ITempFileSession tempFileSession)
         {
@@ -24,8 +25,6 @@ namespace MusicSyncConverter.Tags
             var tagFile = _tempFileSession.GetTempFilePath();
             await ExportTags(tagFile, fileName, cancellationToken);
 
-            var regex = new Regex("^([a-zA-Z ]+)=(.+)$");
-
             var tags = new List<KeyValuePair<string, string>>();
             using (var sr = new StreamReader(tagFile, Encoding.UTF8))
             {
@@ -35,7 +34,7 @@ namespace MusicSyncConverter.Tags
                     if (line == null)
                         break;
 
-                    var match = regex.Match(line);
+                    var match = _keyValueRegex.Match(line);
                     if (match.Success)
                     {
                         tags.Add(new KeyValuePair<string, string>(match.Groups[1].Value.ToUpperInvariant(), match.Groups[2].Value));
@@ -53,10 +52,13 @@ namespace MusicSyncConverter.Tags
             return tags;
         }
 
-        private async Task<string?> ReadLine(StreamReader sr)
+        private static async Task<string?> ReadLine(StreamReader sr)
         {
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
+                // both vorbiscomment and metaflac write the tag file in text mode which converts \n to \r\n
+                // but this also means a tag containing \r\n is converted to \r\r\n which messes things up, so we just ignore all \r and split by \n only
+
                 if (sr.EndOfStream)
                     return null;
                 var sb = new StringBuilder();

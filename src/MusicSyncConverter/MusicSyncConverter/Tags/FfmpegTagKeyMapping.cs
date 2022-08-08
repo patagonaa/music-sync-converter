@@ -1,33 +1,81 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace MusicSyncConverter.Tags
 {
     internal class FfmpegTagKeyMapping
     {
-        private static readonly IList<KeyValuePair<string, string>> _ffmpegToVorbis = new List<KeyValuePair<string, string>>
+        // https://wiki.hydrogenaud.io/index.php?title=Tag_Mapping
+        // https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
+
+        private static readonly IDictionary<string, string> _ffmpegToVorbis = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            new KeyValuePair<string, string>("album", "ALBUM"),
-            new KeyValuePair<string, string>("album_artist", "ALBUMARTIST"),
-            new KeyValuePair<string, string>("artist", "ARTIST"),
-            new KeyValuePair<string, string>("comment", "DESCRIPTION"),
-            new KeyValuePair<string, string>("composer", "COMPOSER"),
-            new KeyValuePair<string, string>("date", "DATE"),
-            new KeyValuePair<string, string>("disc", "DISCNUMBER"),
-            new KeyValuePair<string, string>("genre", "GENRE"),
-            new KeyValuePair<string, string>("title", "TITLE"),
-            new KeyValuePair<string, string>("track", "TRACKNUMBER")
+            { "album", "ALBUM" },
+            { "album_artist", "ALBUMARTIST" },
+            { "performer", "PERFORMER" },
+            { "conductor", "CONDUCTOR" },
+            { "artist", "ARTIST" },
+            { "description", "DESCRIPTION" },
+            { "comment", "COMMENT" },
+            { "lyrics", "UNSYNCEDLYRICS" },
+            { "composer", "COMPOSER" },
+            { "date", "DATE" },
+            { "year", "DATE" },
+            { "TDAT", "DATE" },
+            { "disc", "DISCNUMBER" },
+            { "genre", "GENRE" },
+            { "title", "TITLE" },
+            { "track", "TRACKNUMBER" },
+            { "publisher", "PUBLISHER" },
+            { "language", "LANGUAGE" },
+            { "website", "WEBSITE" },
+            { "purl", "WEBSITE" },
+            { "copyright", "COPYRIGHT" },
+            { "TSRC", "ISRC" },
+            { "ISRC", "ISRC" },
+            { "author", "AUTHOR" },
+            { "compilation", "COMPILATION" },
+            { "MIXARTIST", "REMIXER" },
+            { "TPE4", "REMIXER" },
+            { "REMIXER", "REMIXER" },
+            { "TBPM", "BPM" },
+            { "TOPE", "BPM" },
+        };
+        private static readonly IDictionary<string, string> _vorbisToFfmpeg = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ALBUM", "album" },
+            { "ALBUMARTIST", "album_artist" },
+            { "CONDUCTOR", "performer" },
+            { "PERFORMER", "performer" },
+            { "ARTIST", "artist" },
+            { "DESCRIPTION", "comment" },
+            { "COMMENT", "comment" },
+            { "UNSYNCEDLYRICS", "lyrics" },
+            { "COMPOSER", "composer" },
+            { "DATE", "date" },
+            { "DISCNUMBER", "disc" },
+            { "GENRE", "genre" },
+            { "TITLE", "title" },
+            { "TRACKNUMBER", "track" },
+            { "PUBLISHER", "publisher" },
+            { "ORGANIZATION", "publisher" },
+            { "LANGUAGE", "language" },
+            { "WEBSITE", "website" },
+            { "WWW", "website" },
+            { "COPYRIGHT", "copyright" },
+            { "ISRC", "isrc" },
+            { "AUTHOR", "author" },
+            { "COMPILATION", "compilation" },
         };
 
         public static string? GetVorbisKey(string ffmpegKey)
         {
-            return _ffmpegToVorbis.FirstOrDefault(x => x.Key.Equals(ffmpegKey, StringComparison.OrdinalIgnoreCase)).Value;
+            return _ffmpegToVorbis.TryGetValue(ffmpegKey, out var vorbisKey) ? vorbisKey : null;
         }
 
         public static string? GetFfmpegKey(string vorbisKey)
         {
-            return _ffmpegToVorbis.FirstOrDefault(x => x.Value.Equals(vorbisKey, StringComparison.OrdinalIgnoreCase)).Key;
+            return _vorbisToFfmpeg.TryGetValue(vorbisKey, out var ffmpegKey) ? ffmpegKey : null;
         }
     }
 }

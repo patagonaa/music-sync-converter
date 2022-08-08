@@ -1,5 +1,4 @@
-﻿using FFMpegCore;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -51,8 +50,9 @@ namespace MusicSyncConverter.Tags
 
         protected override async Task ImportUnsafeTag(KeyValuePair<string, string> tag, string fileName, CancellationToken cancellationToken)
         {
-            // vorbiscomment does not seem to have a good way to import tags with
-            await ImportSafeTags(new List<KeyValuePair<string, string>> { new KeyValuePair<string, string>(tag.Key, tag.Value.ReplaceLineEndings(" ")) }, false, fileName, cancellationToken);
+            // vorbiscomment does not seem to have a good way to import tags with line endings
+            var safeTag = new KeyValuePair<string, string>(tag.Key, tag.Value.ReplaceLineEndings(" "));
+            await ImportSafeTags(new List<KeyValuePair<string, string>> { safeTag }, false, fileName, cancellationToken);
         }
 
         public override bool CanHandle(string fileName, string fileExtension)

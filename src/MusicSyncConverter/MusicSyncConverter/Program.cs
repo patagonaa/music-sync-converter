@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using MusicSyncConverter.Config;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -39,12 +38,18 @@ namespace MusicSyncConverter
 
             try
             {
+                var logger = new MemoryLogger();
                 var tempFileService = new TempFileService();
                 tempFileService.CleanupTempDir(cts.Token);
                 using (var tempFileSession = tempFileService.GetNewSession())
                 {
-                    var service = new SyncService(tempFileSession);
+                    var service = new SyncService(tempFileSession, logger);
                     await service.Run(config, cts.Token);
+                }
+
+                foreach (var message in logger.Messages.Distinct().OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))
+                {
+                    Console.WriteLine($"{message.LogLevel}: {message.Message}");
                 }
             }
             catch (OperationCanceledException)
