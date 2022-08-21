@@ -85,9 +85,12 @@ namespace MusicSyncConverter.Tags
                     case "BPM" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
                         toReturn.Add(new KeyValuePair<string, string>("TBPM", tag.Value));
                         break;
+                    case "ORIGARTIST" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                        toReturn.Add(new KeyValuePair<string, string>("TOPE", tag.Value));
+                        break;
 
                     default:
-                        _logger.LogInformation("Could not map Vorbis key {VorbisKey} to FFMPEG key", tag.Key);
+                        _logger.LogInformation("Could not map Vorbis key {VorbisKey} to FFMPEG {TargetExtension} key", tag.Key, targetExtension);
                         break;
                 }
             }
@@ -146,6 +149,9 @@ namespace MusicSyncConverter.Tags
                     case "TBPM" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("BPM", tag.Value);
                         break;
+                    case "TOPE" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                        yield return new KeyValuePair<string, string>("ORIGARTIST", tag.Value);
+                        break;
 
                     case "REMIXER" when sourceExtension.Equals(".m4a", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("REMIXER", tag.Value);
@@ -161,7 +167,7 @@ namespace MusicSyncConverter.Tags
                             yield return new KeyValuePair<string, string>(tag.Key, tag.Value);
                             break;
                         }
-                        _logger.LogInformation("Could not map FFMPEG key {FfmpegKey} to Vorbis key", tag.Key);
+                        _logger.LogInformation("Could not map FFMPEG {SourceExtension} key {FfmpegKey} to Vorbis key", sourceExtension, tag.Key);
                         break;
                 }
             }
