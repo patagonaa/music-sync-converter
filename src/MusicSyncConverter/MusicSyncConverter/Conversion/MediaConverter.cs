@@ -154,39 +154,14 @@ namespace MusicSyncConverter.Conversion
 
             foreach (var toApply in overrides.Skip(1))
             {
-                if (toApply.Extension != null)
+                if ((toReturn.Extension != null && toReturn.Extension != toApply.Extension) ||
+                    (toReturn.Codec != null && toReturn.Codec != toApply.Codec) ||
+                    (toReturn.Profile != null && toReturn.Profile != toApply.Profile) ||
+                    (toReturn.Muxer != null && toReturn.Muxer != toApply.Muxer))
                 {
-                    if (toReturn.Extension != null && toReturn.Extension != toApply.Extension)
-                    {
-                        throw new InvalidOperationException("Multiple extension limitations can't be merged");
-                    }
                     toReturn.Extension = toApply.Extension;
-                }
-
-                if (toApply.Codec != null)
-                {
-                    if (toReturn.Codec != null && toReturn.Codec != toApply.Codec)
-                    {
-                        throw new InvalidOperationException("Multiple codec limitations can't be merged");
-                    }
                     toReturn.Codec = toApply.Codec;
-                }
-
-                if (toApply.Profile != null)
-                {
-                    if (toReturn.Profile != null && toReturn.Profile != toApply.Profile)
-                    {
-                        throw new InvalidOperationException("Multiple profile limitations can't be merged");
-                    }
                     toReturn.Profile = toApply.Profile;
-                }
-
-                if (toApply.Muxer != null)
-                {
-                    if (toReturn.Muxer != null && toReturn.Muxer != toApply.Muxer)
-                    {
-                        throw new InvalidOperationException("Multiple muxer limitations can't be merged");
-                    }
                     toReturn.Muxer = toApply.Muxer;
                 }
 
