@@ -5,10 +5,10 @@ using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Tags;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -56,7 +56,7 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Error during FFProbe: " + ex);
             }
 
-            var tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceExtension, cancellationToken);
+            IReadOnlyList<KeyValuePair<string, string>> tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceExtension, cancellationToken);
             tags = FilterTags(tags);
             tags = SanitizeTags(tags, originalFilePath, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
 
@@ -268,16 +268,23 @@ namespace MusicSyncConverter.Conversion
             {
                 var tagValue = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
                 if (hasUnsupportedChars)
-                    _logger.LogInformation(GetUnsupportedStringsMessage(originalPath, tag.Value));
+                    _logger.LogInformation("Unsupported chars in tag {Tag}: {TagValue}", tag.Key, FormatLogValue(tag.Value));
                 toReturn.Add(new KeyValuePair<string, string>(tag.Key, tagValue));
             }
 
             return toReturn;
         }
 
-        private string GetUnsupportedStringsMessage(string path, string str)
+        private string FormatLogValue(string value)
         {
-            return $"Unsupported chars in {path}: {str}";
+            if (value.Contains("\n"))
+            {
+                return $"{Environment.NewLine}\t{value.ReplaceLineEndings($"{Environment.NewLine}\t")}";
+            }
+            else
+            {
+                return value;
+            }
         }
 
         private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, AudioStream audioStream)
