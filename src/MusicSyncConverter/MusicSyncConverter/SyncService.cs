@@ -95,10 +95,10 @@ namespace MusicSyncConverter
                     var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                     // --- song handling ---
-                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => new[] { await ConvertSong(x, config, handledFiles, cancellationToken) }.Where(y => y != null)!, workerOptions);
+                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => await FilterNull(() => AddLogContext(x.SourceFileInfo, () => ConvertSong(x, config, handledFiles, cancellationToken))), workerOptions);
                     convertSongBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
-                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await ReadSong(x, fileProvider, cancellationToken), readOptions);
+                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(x => CompareSongDates(x, config, targetPathComparer, syncTarget), readOptions);
@@ -112,19 +112,19 @@ namespace MusicSyncConverter
                     getSyncInfoBlock.LinkTo(groupSongsByDirectoryBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // --- playlist handling ---
-                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => new[] { await ReadPlaylist(file, fileProvider) }.Where(x => x != null)!, readOptions);
+                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => await FilterNull(() => AddLogContext(file, () => ReadPlaylist(file, fileProvider))), readOptions);
 
                     IDataflowBlock? resolvePlaylistBlock = null;
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await ResolvePlaylist(x, fileProvider, compareSongBlock), workerOptions);
+                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await AddLogContext(x.PlaylistFileInfo, () => ResolvePlaylist(x, fileProvider, compareSongBlock)), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
                     else
                     {
-                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => new[] { await ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken) }.Where(x => x != null)!, workerOptions);
+                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => await FilterNull(() => AddLogContext(x.PlaylistFileInfo, () => ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken))), workerOptions);
                         readPlaylistBlock.LinkTo(convertPlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         convertPlaylistBlockSpecific.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
                         convertPlaylistBlock = convertPlaylistBlockSpecific;
@@ -207,6 +207,40 @@ namespace MusicSyncConverter
                 Console.WriteLine(flattened);
             }
             cancellationTokenSource.Cancel();
+        }
+
+        private IDisposable StartLogContext(SourceFileInfo sourceFile)
+        {
+            return _logger.BeginScope(new Dictionary<string, string> { { "SourceFile", sourceFile.Path } });
+        }
+
+        private async Task<T> AddLogContext<T>(SourceFileInfo sourceFile, Func<Task<T>> action)
+        {
+            T result;
+            using (StartLogContext(sourceFile))
+            {
+                result = await action();
+            }
+            return result;
+        }
+
+        private async Task AddLogContext(SourceFileInfo sourceFile, Func<Task> action)
+        {
+            using (StartLogContext(sourceFile))
+            {
+                await action();
+            }
+        }
+
+        private async Task<IEnumerable<T>> FilterNull<T>(Func<Task<T?>> action)
+        {
+            static IEnumerable<T> Filter(T? value)
+            {
+                if (value != null)
+                    yield return value;
+            }
+            var result = await action();
+            return Filter(result);
         }
 
         private async Task ReadDirs(SyncConfig config, IFileProvider fileProvider, ITargetBlock<SourceFileInfo> targetBlock, bool targetCaseSensitive, CancellationToken cancellationToken)
@@ -411,41 +445,47 @@ namespace MusicSyncConverter
 
             foreach (var syncInfo in syncInfos)
             {
-                if (Path.GetDirectoryName(exampleSyncInfo.TargetPath) != Path.GetDirectoryName(syncInfo.TargetPath))
-                    throw new InvalidOperationException("CompareSongDates can only compare batches of files in the same directory");
-
-                if (!config.SourceExtensions.Contains(Path.GetExtension(syncInfo.SourceFileInfo.Path), StringComparer.OrdinalIgnoreCase))
+                SongReadWorkItem? result = null;
+                using (StartLogContext(syncInfo.SourceFileInfo))
                 {
-                    continue;
-                }
+                    if (Path.GetDirectoryName(exampleSyncInfo.TargetPath) != Path.GetDirectoryName(syncInfo.TargetPath))
+                        throw new InvalidOperationException("CompareSongDates can only compare batches of files in the same directory");
 
-                var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
-
-                var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
-
-                if (targetInfos.Length == 1 && FileDatesEqual(syncInfo.SourceFileInfo.ModifiedDate, targetInfos[0].LastModified))
-                {
-                    // only one target item, so check if it is up to date
-                    yield return new SongReadWorkItem
+                    if (!config.SourceExtensions.Contains(Path.GetExtension(syncInfo.SourceFileInfo.Path), StringComparer.OrdinalIgnoreCase))
                     {
-                        ActionType = CompareResultType.Keep,
-                        SourceFileInfo = syncInfo.SourceFileInfo,
-                        TargetFilePath = Path.Join(targetDirPath, targetInfos[0].Name)
-                    };
-                }
-                else
-                {
-                    if (hasUnsupportedChars)
-                        _logger.LogInformation("Unsupported chars in path {TargetPath}", syncInfo.TargetPath);
+                        continue;
+                    }
 
-                    // zero or multiple target files, so just replace it
-                    yield return new SongReadWorkItem
+                    var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
+
+                    var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
+
+                    if (targetInfos.Length == 1 && FileDatesEqual(syncInfo.SourceFileInfo.ModifiedDate, targetInfos[0].LastModified))
                     {
-                        ActionType = CompareResultType.Replace,
-                        SourceFileInfo = syncInfo.SourceFileInfo,
-                        TargetFilePath = targetPath
-                    };
+                        // only one target item, so check if it is up to date
+                        result = new SongReadWorkItem
+                        {
+                            ActionType = CompareResultType.Keep,
+                            SourceFileInfo = syncInfo.SourceFileInfo,
+                            TargetFilePath = Path.Join(targetDirPath, targetInfos[0].Name)
+                        };
+                    }
+                    else
+                    {
+                        if (hasUnsupportedChars)
+                            _logger.LogInformation("Unsupported chars in path");
+
+                        // zero or multiple target files, so just replace it
+                        result = new SongReadWorkItem
+                        {
+                            ActionType = CompareResultType.Replace,
+                            SourceFileInfo = syncInfo.SourceFileInfo,
+                            TargetFilePath = targetPath
+                        };
+                    }
                 }
+                if (result != null)
+                    yield return result;
             }
         }
 
@@ -554,7 +594,7 @@ namespace MusicSyncConverter
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogError(ex, "Error while converting {SourcePath}", workItem.SourceFileInfo.Path);
+                                _logger.LogError(ex, "Error while converting");
                                 return null;
                             }
                             var outFilePath = Path.ChangeExtension(workItem.TargetFilePath, outputExtension);

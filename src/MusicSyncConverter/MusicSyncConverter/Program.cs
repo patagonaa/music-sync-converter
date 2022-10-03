@@ -47,9 +47,14 @@ namespace MusicSyncConverter
                     await service.Run(config, cts.Token);
                 }
 
-                foreach (var message in logger.Messages.Distinct().OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))
+                foreach (var fileGroup in logger.Messages.GroupBy(x => x.Filename).OrderBy(x => x.Key))
                 {
-                    Console.WriteLine($"{message.LogLevel}: {message.Message}");
+                    Console.WriteLine($"[{fileGroup.Key}]");
+                    foreach (var item in fileGroup.OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))
+                    {
+                        Console.WriteLine($"\t{item.LogLevel}: {item.Message.ReplaceLineEndings($"{Environment.NewLine}\t")}");
+                    }
+                    Console.WriteLine();
                 }
             }
             catch (OperationCanceledException)
