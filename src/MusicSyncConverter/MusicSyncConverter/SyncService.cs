@@ -95,10 +95,10 @@ namespace MusicSyncConverter
                     var writeBlock = new ActionBlock<OutputFile>(file => WriteFile(file, syncTarget, cancellationToken), writeOptions);
 
                     // --- song handling ---
-                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => await FilterNull(() => AddLogContext(x.SourceFileInfo, () => ConvertSong(x, config, handledFiles, cancellationToken))), workerOptions);
+                    var convertSongBlock = new TransformManyBlock<SongConvertWorkItem, OutputFile>(async x => await FilterNull(() => AddLogContext(x.SourceFileInfo, x.TargetFilePath, () => ConvertSong(x, config, handledFiles, cancellationToken))), workerOptions);
                     convertSongBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
-                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
+                    var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, x.TargetFilePath, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(x => CompareSongDates(x, config, targetPathComparer, syncTarget), readOptions);
@@ -112,19 +112,19 @@ namespace MusicSyncConverter
                     getSyncInfoBlock.LinkTo(groupSongsByDirectoryBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // --- playlist handling ---
-                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => await FilterNull(() => AddLogContext(file, () => ReadPlaylist(file, fileProvider))), readOptions);
+                    var readPlaylistBlock = new TransformManyBlock<SourceFileInfo, Playlist>(async file => await FilterNull(() => AddLogContext(file, null, () => ReadPlaylist(file, fileProvider))), readOptions);
 
                     IDataflowBlock? resolvePlaylistBlock = null;
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await AddLogContext(x.PlaylistFileInfo, () => ResolvePlaylist(x, fileProvider, compareSongBlock)), workerOptions);
+                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await AddLogContext(x.PlaylistFileInfo, null, () => ResolvePlaylist(x, fileProvider, compareSongBlock)), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
                     else
                     {
-                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => await FilterNull(() => AddLogContext(x.PlaylistFileInfo, () => ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken))), workerOptions);
+                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => await FilterNull(() => AddLogContext(x.PlaylistFileInfo, null, () => ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken))), workerOptions);
                         readPlaylistBlock.LinkTo(convertPlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         convertPlaylistBlockSpecific.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
                         convertPlaylistBlock = convertPlaylistBlockSpecific;
@@ -209,24 +209,28 @@ namespace MusicSyncConverter
             cancellationTokenSource.Cancel();
         }
 
-        private IDisposable StartLogContext(SourceFileInfo sourceFile)
+        private IDisposable StartLogContext(SourceFileInfo sourceFile, string? targetFile)
         {
-            return _logger.BeginScope(new Dictionary<string, string> { { "SourceFile", sourceFile.Path } });
+            return _logger.BeginScope(new Dictionary<string, object?>
+            {
+                { "SourceFile", sourceFile.Path },
+                { "TargetFile", targetFile }
+            });
         }
 
-        private async Task<T> AddLogContext<T>(SourceFileInfo sourceFile, Func<Task<T>> action)
+        private async Task<T> AddLogContext<T>(SourceFileInfo sourceFile, string? targetFile, Func<Task<T>> action)
         {
             T result;
-            using (StartLogContext(sourceFile))
+            using (StartLogContext(sourceFile, targetFile))
             {
                 result = await action();
             }
             return result;
         }
 
-        private async Task AddLogContext(SourceFileInfo sourceFile, Func<Task> action)
+        private async Task AddLogContext(SourceFileInfo sourceFile, string? targetFile, Func<Task> action)
         {
-            using (StartLogContext(sourceFile))
+            using (StartLogContext(sourceFile, targetFile))
             {
                 await action();
             }
@@ -446,7 +450,7 @@ namespace MusicSyncConverter
             foreach (var syncInfo in syncInfos)
             {
                 SongReadWorkItem? result = null;
-                using (StartLogContext(syncInfo.SourceFileInfo))
+                using (StartLogContext(syncInfo.SourceFileInfo, syncInfo.TargetPath))
                 {
                     if (Path.GetDirectoryName(exampleSyncInfo.TargetPath) != Path.GetDirectoryName(syncInfo.TargetPath))
                         throw new InvalidOperationException("CompareSongDates can only compare batches of files in the same directory");

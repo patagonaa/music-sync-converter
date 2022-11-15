@@ -47,7 +47,7 @@ namespace MusicSyncConverter
                     await service.Run(config, cts.Token);
                 }
 
-                foreach (var fileGroup in logger.Messages.GroupBy(x => x.Filename).OrderBy(x => x.Key))
+                foreach (var fileGroup in logger.Messages.Distinct().GroupBy(x => x.Filename).OrderBy(x => x.Key))
                 {
                     Console.WriteLine($"[{fileGroup.Key}]");
                     foreach (var item in fileGroup.OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))

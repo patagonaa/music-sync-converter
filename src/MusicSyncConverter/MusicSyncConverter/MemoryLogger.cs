@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using MusicSyncConverter.FileProviders;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -30,8 +31,12 @@ namespace MusicSyncConverter
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
         {
-            var filename = _scopeProvider.GetStates().OfType<IDictionary<string, string>>().FirstOrDefault(x => x.ContainsKey("SourceFile"))?["SourceFile"];
-            _logMessages.Add((logLevel, filename, formatter(state, exception)));
+            var states = _scopeProvider.GetStates().OfType<IDictionary<string, object?>>().SelectMany(x => x).ToList();
+
+            var sourceFile = states.FirstOrDefault(x => x.Key == "SourceFile").Value?.ToString();
+            var targetFile = states.FirstOrDefault(x => x.Key == "TargetFile").Value?.ToString();
+
+            _logMessages.Add((logLevel, PathUtils.NormalizePath(targetFile ?? sourceFile), formatter(state, exception)));
         }
 
         private class ScopeProvider
