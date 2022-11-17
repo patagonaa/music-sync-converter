@@ -1,24 +1,21 @@
-﻿using Microsoft.Extensions.FileProviders;
-using SharpAdbClient;
+﻿using AdbClient;
+using Microsoft.Extensions.FileProviders;
 using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace MusicSyncConverter.FileProviders.Adb
 {
     internal class AdbDirectoryContents : IDirectoryContents
     {
         private readonly string _path;
-        private readonly IEnumerable<FileStatistics> _dirList;
-        private readonly SyncService _syncService;
-        private readonly SemaphoreSlim _syncServiceSemaphore;
+        private readonly IEnumerable<StatEntry> _dirList;
+        private readonly AdbSyncClient _syncService;
 
-        public AdbDirectoryContents(string path, IEnumerable<FileStatistics> dirList, SyncService syncService, SemaphoreSlim syncServiceSemaphore)
+        public AdbDirectoryContents(string path, IEnumerable<StatEntry> dirList, AdbSyncClient syncService)
         {
             _path = path;
             _dirList = dirList;
             _syncService = syncService;
-            _syncServiceSemaphore = syncServiceSemaphore;
         }
 
         public bool Exists => true;
@@ -27,8 +24,8 @@ namespace MusicSyncConverter.FileProviders.Adb
         {
             foreach (var item in _dirList)
             {
-                if (item.FileMode.HasFlag(UnixFileMode.Regular) || item.FileMode.HasFlag(UnixFileMode.Directory))
-                    yield return new AdbFileInfo(_path, item, _syncService, _syncServiceSemaphore);
+                if (item.Mode.HasFlag(UnixFileMode.RegularFile) || item.Mode.HasFlag(UnixFileMode.Directory))
+                    yield return new AdbFileInfo(_path, item, _syncService);
             }
         }
 
