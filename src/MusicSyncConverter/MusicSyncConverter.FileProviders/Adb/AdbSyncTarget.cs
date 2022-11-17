@@ -16,31 +16,30 @@ namespace MusicSyncConverter.FileProviders.Adb
     internal class AdbSyncTarget : ISyncTarget, IDisposable
     {
         private readonly string _basePath;
-
-        private AdbServicesClient _adbClient;
-        private string _deviceSerial;
-        private AdbSyncClient _syncService;
+        private readonly AdbServicesClient _adbClient;
+        private readonly string _deviceSerial;
+        private readonly AdbSyncClient _syncService;
 
         public AdbSyncTarget(string serial, string basePath)
         {
             _basePath = basePath;
-            Init(serial).Wait();
+            _adbClient = new AdbServicesClient();
+            (_deviceSerial, _syncService) = Init(serial).Result;
         }
 
-        private async Task Init(string serial)
+        private async Task<(string Serial, AdbSyncClient SyncClient)> Init(string serial)
         {
-            _adbClient = new AdbServicesClient();
             var devices = await _adbClient.GetDevices();
             var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
             if (device == default)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
-            _deviceSerial = device.Serial;
-            _syncService = await _adbClient.GetSyncClient(_deviceSerial);
+            var syncClient = await _adbClient.GetSyncClient(device.Serial);
+            return (device.Serial, syncClient);
         }
 
         private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
 
-        private bool IsRequestedDevice((string Serial, string _) device, string serial)
+        private static bool IsRequestedDevice((string Serial, string _) device, string serial)
         {
             if (device.Serial == serial)
                 return true;
