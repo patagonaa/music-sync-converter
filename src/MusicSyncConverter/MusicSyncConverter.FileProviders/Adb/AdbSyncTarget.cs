@@ -1,6 +1,6 @@
-﻿using Microsoft.Extensions.FileProviders;
+﻿using AdbClient;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Primitives;
-using MusicSyncConverter.AdbAbstraction;
 using MusicSyncConverter.FileProviders.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -17,7 +17,7 @@ namespace MusicSyncConverter.FileProviders.Adb
     {
         private readonly string _basePath;
 
-        private AdbClient _adbClient;
+        private AdbServicesClient _adbClient;
         private string _deviceSerial;
         private AdbSyncClient _syncService;
 
@@ -29,16 +29,26 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         private async Task Init(string serial)
         {
-            _adbClient = new AdbClient();
+            _adbClient = new AdbServicesClient();
             var devices = await _adbClient.GetDevices();
-            var device = devices.FirstOrDefault(x => x.Serial == serial);
+            var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
             if (device == default)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
             _deviceSerial = device.Serial;
-            _syncService = await _adbClient.GetSyncClient(serial);
+            _syncService = await _adbClient.GetSyncClient(_deviceSerial);
         }
 
         private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
+
+        private bool IsRequestedDevice((string Serial, string _) device, string serial)
+        {
+            if (device.Serial == serial)
+                return true;
+            var match = _adbTcpSerialRegex.Match(device.Serial);
+            if (match.Success && match.Groups["serial"].Value == serial)
+                return true;
+            return false;
+        }
 
         public Task Complete(CancellationToken cancellationToken)
         {

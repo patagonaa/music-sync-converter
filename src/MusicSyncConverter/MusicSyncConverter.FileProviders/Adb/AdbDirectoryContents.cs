@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.FileProviders;
-using MusicSyncConverter.AdbAbstraction;
+﻿using AdbClient;
+using Microsoft.Extensions.FileProviders;
 using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace MusicSyncConverter.FileProviders.Adb
 {

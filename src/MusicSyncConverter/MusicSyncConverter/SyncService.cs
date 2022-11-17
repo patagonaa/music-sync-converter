@@ -49,7 +49,6 @@ namespace MusicSyncConverter
             using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(upstreamCancellationToken);
             var cancellationToken = cancellationTokenSource.Token;
 
-
             //set up pipeline
             var readOptions = new ExecutionDataflowBlockOptions
             {
