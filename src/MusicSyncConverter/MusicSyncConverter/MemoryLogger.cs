@@ -19,7 +19,7 @@ namespace MusicSyncConverter
             _scopeProvider = new ScopeProvider();
         }
 
-        public IDisposable? BeginScope<TState>(TState state)
+        public IDisposable BeginScope<TState>(TState state)
         {
             return _scopeProvider.Push(state);
         }
@@ -29,7 +29,7 @@ namespace MusicSyncConverter
             return true;
         }
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             var states = _scopeProvider.GetStates().OfType<IDictionary<string, object?>>().SelectMany(x => x).ToList();
 
