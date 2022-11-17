@@ -13,7 +13,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly PortableDeviceApi.IPortableDeviceProperties _contentProperties;
         private readonly List<IFileInfo> _fileInfos;
 
-        public WpdDirectoryContents(string objectId, object synclock, PortableDeviceApi.IPortableDeviceContent content, PortableDeviceApi.IPortableDeviceProperties contentProperties)
+        public WpdDirectoryContents(string objectId, PortableDeviceApi.IPortableDeviceContent content, PortableDeviceApi.IPortableDeviceProperties contentProperties)
         {
             _objectId = objectId;
             _content = content;
@@ -25,7 +25,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             var children = _content.EnumObjects(0, _objectId);
             foreach (var childId in children.Enumerate())
             {
-                _fileInfos.Add(new WpdFileInfo(childId, synclock, _content, _contentProperties));
+                _fileInfos.Add(new WpdFileInfo(childId, _contentProperties));
             }
 
             sw.Stop();

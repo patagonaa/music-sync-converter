@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Vanara.PInvoke;
@@ -19,7 +20,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
     // https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices
     // https://github.com/teapottiger/WPDApi/blob/62be7c4acc6104aef108769b4496b35b0a7fbd53/PortableDevices/PortableDevice.cs
     // https://github.com/dahall/Vanara/blob/76722fbcf5c1f90dccee9751dc0367641e37b4f9/UnitTests/PInvoke/PortableDeviceApi/PortableDeviceApiTests.cs
-
+    [SupportedOSPlatform("windows")]
     public class WpdSyncTarget : ISyncTarget, IDisposable
     {
         private readonly object _syncLock = new object();
@@ -42,7 +43,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             _objectIdCache = new Dictionary<string, string>(_pathComparer);
         }
 
-        private IPortableDevice GetDevice(string toFind)
+        private static IPortableDevice GetDevice(string toFind)
         {
             var deviceMan = new IPortableDeviceManager();
 
@@ -61,7 +62,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
             throw new InvalidOperationException($"Device {toFind} not found! Available devices: {string.Join(";", deviceNames)}");
         }
 
-        private IPortableDeviceValues GetClientInfo()
+        private static IPortableDeviceValues GetClientInfo()
         {
             var clientInfo = new IPortableDeviceValues();
             clientInfo.SetStringValue(WPD_CLIENT_NAME, "MusicSyncConverter");
@@ -181,7 +182,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 if (obj == null)
                     return new NotFoundFileInfo(subPath);
 
-                var fileInfo = new WpdFileInfo(obj, _syncLock, _content, _contentProperties);
+                var fileInfo = new WpdFileInfo(obj, _contentProperties);
 
                 // this part is really stupid but at least PhysicalFileProvider returns NotFound in this case,
                 // so we do the same here so callers don't rely on GetFileInfo working for directories.
@@ -199,7 +200,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                 if (!_directoryContentsCache.TryGetValue(subPath, out IDirectoryContents? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
-                    directoryContents = obj == null ? NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _syncLock, _content, _contentProperties);
+                    directoryContents = obj == null ? NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _content, _contentProperties);
                     _directoryContentsCache.TryAdd(subPath, directoryContents);
                 }
                 return directoryContents;

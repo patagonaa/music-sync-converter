@@ -30,7 +30,7 @@ namespace MusicSyncConverter.FileProviders
                     }
                 case "wpd":
                     {
-                        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                        if (!OperatingSystem.IsWindows())
                             throw new PlatformNotSupportedException("_Windows_ Portable Devices is not supported on non-Windows systems.");
                         var wpdPath = uriString.Replace("wpd://", "");
                         var pathParts = wpdPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
