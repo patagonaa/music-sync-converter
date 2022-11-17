@@ -2,7 +2,6 @@
 using MusicSyncConverter.AdbAbstraction;
 using System;
 using System.IO;
-using System.Threading;
 
 namespace MusicSyncConverter.FileProviders.Adb
 {
@@ -11,14 +10,12 @@ namespace MusicSyncConverter.FileProviders.Adb
         private readonly string _directory;
         private readonly StatEntry _item;
         private readonly AdbSyncClient _syncService;
-        private readonly SemaphoreSlim _syncServiceSemaphore;
 
-        public AdbFileInfo(string directory, StatEntry item, AdbSyncClient syncService, SemaphoreSlim syncServiceSemaphore)
+        public AdbFileInfo(string directory, StatEntry item, AdbSyncClient syncService)
         {
             _directory = directory;
             _item = item;
             _syncService = syncService;
-            _syncServiceSemaphore = syncServiceSemaphore;
         }
 
         public bool Exists => _item.Mode != 0;
@@ -37,17 +34,9 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public Stream CreateReadStream()
         {
-            _syncServiceSemaphore.Wait();
-            try
-            {
-                var ms = new MemoryStream(_item.Size);
-                //_syncService.Pull(FullPath, ms, null, CancellationToken.None);
-                return ms;
-            }
-            finally
-            {
-                _syncServiceSemaphore.Release();
-            }
+            var ms = new MemoryStream(_item.Size);
+            _syncService.Pull(FullPath, ms).Wait();
+            return ms;
         }
     }
 }
