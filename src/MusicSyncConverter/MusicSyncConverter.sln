@@ -11,6 +11,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MusicSyncConverter.FileProv
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpAdbClient", "..\..\lib\SharpAdbClient\SharpAdbClient\SharpAdbClient.csproj", "{E3B14767-7D52-4B3D-BF4C-399119C040DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MusicSyncConverter.AdbAbstraction", "MusicSyncConverter.AdbAbstraction\MusicSyncConverter.AdbAbstraction.csproj", "{09213095-2C6C-4FF8-8937-1AD3E8BBB0D4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{E3B14767-7D52-4B3D-BF4C-399119C040DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E3B14767-7D52-4B3D-BF4C-399119C040DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E3B14767-7D52-4B3D-BF4C-399119C040DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{09213095-2C6C-4FF8-8937-1AD3E8BBB0D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09213095-2C6C-4FF8-8937-1AD3E8BBB0D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09213095-2C6C-4FF8-8937-1AD3E8BBB0D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09213095-2C6C-4FF8-8937-1AD3E8BBB0D4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

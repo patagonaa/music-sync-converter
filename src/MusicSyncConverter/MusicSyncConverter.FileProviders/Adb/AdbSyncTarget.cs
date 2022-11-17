@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Primitives;
+using MusicSyncConverter.AdbAbstraction;
 using MusicSyncConverter.FileProviders.Abstractions;
-using SharpAdbClient;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -16,34 +16,24 @@ namespace MusicSyncConverter.FileProviders.Adb
     internal class AdbSyncTarget : ISyncTarget, IDisposable
     {
         private readonly AdbClient _adbClient;
-        private readonly DeviceData _device;
-        private readonly SyncService _syncService;
+        private readonly string _deviceSerial;
+        private readonly AdbSyncClient _syncService;
         private readonly string _basePath;
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public AdbSyncTarget(string serial, string basePath)
         {
             _adbClient = new AdbClient();
-            var devices = _adbClient.GetDevices();
-            var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
-            if (device == null)
+            var devices = _adbClient.GetDevices().Result;
+            var device = devices.FirstOrDefault(x => x.Serial == serial);
+            if (device == default)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
-            _device = device;
-            _syncService = new SyncService(_adbClient, _device);
+            _deviceSerial = device.Serial;
+            _syncService = _adbClient.GetSyncClient(serial).Result;
             _basePath = basePath;
         }
 
         private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
-
-        private bool IsRequestedDevice(DeviceData device, string serial)
-        {
-            if (device.Serial == serial)
-                return true;
-            var match = _adbTcpSerialRegex.Match(device.Serial);
-            if (match.Success && match.Groups["serial"].Value == serial)
-                return true;
-            return false;
-        }
 
         public Task Complete(CancellationToken cancellationToken)
         {
@@ -63,7 +53,7 @@ namespace MusicSyncConverter.FileProviders.Adb
                 throw new ArgumentException("all files must be AdbFileInfo", nameof(files));
             }
 
-            var receiver = new SyncTargetShellOutputReceiver();
+            //var receiver = new SyncTargetShellOutputReceiver();
 
             await _semaphore.WaitAsync(cancellationToken);
             try
@@ -71,15 +61,15 @@ namespace MusicSyncConverter.FileProviders.Adb
                 foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    string command = "rmdir " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
-                    await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                    //string command = "rmdir " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
+                    //await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
                 }
 
                 foreach (var batch in adbItems.Where(x => !x.IsDirectory).Chunk(10))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    string command = "rm " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
-                    await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                    //string command = "rm " + string.Join(' ', batch.Select(x => EscapeFilename(x.FullPath)));
+                    //await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
                 }
             }
             finally
@@ -87,15 +77,15 @@ namespace MusicSyncConverter.FileProviders.Adb
                 _semaphore.Release();
             }
 
-            if (receiver.Lines.Any())
-            {
-                throw new InvalidOperationException(string.Join(Environment.NewLine, receiver.Lines));
-            }
+            //if (receiver.Lines.Any())
+            //{
+            //    throw new InvalidOperationException(string.Join(Environment.NewLine, receiver.Lines));
+            //}
         }
 
         private string EscapeFilename(string path)
         {
-            return $"\"`echo {Convert.ToBase64String(AdbClient.Encoding.GetBytes(path))} | base64 -d`\"";
+            return $"\"`echo {Convert.ToBase64String(AdbSyncClient.PathEncoding.GetBytes(path))} | base64 -d`\"";
         }
 
         public void Dispose()
@@ -112,11 +102,11 @@ namespace MusicSyncConverter.FileProviders.Adb
             _semaphore.Wait();
             try
             {
-                var stat = _syncService.Stat(path);
-                if (stat.FileMode == 0)
+                var stat = _syncService.Stat(path).Result;
+                if (stat.Mode == 0)
                     return NotFoundDirectoryContents.Singleton;
 
-                var dirList = _syncService.GetDirectoryListing(path);
+                var dirList = _syncService.List(path).Result;
                 return new AdbDirectoryContents(path, dirList, _syncService, _semaphore);
             }
             finally
@@ -132,7 +122,7 @@ namespace MusicSyncConverter.FileProviders.Adb
             _semaphore.Wait();
             try
             {
-                var stat = _syncService.Stat(path);
+                var stat = _syncService.Stat(path).Result;
                 return new AdbFileInfo(path, stat, _syncService, _semaphore);
             }
             finally
@@ -158,12 +148,12 @@ namespace MusicSyncConverter.FileProviders.Adb
             await _semaphore.WaitAsync(cancellationToken);
             try
             {
-                _syncService.Push(content, path, 660, modified ?? DateTimeOffset.Now, null, cancellationToken);
-                var receiver = new SyncTargetShellOutputReceiver();
-                var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
-                var command = $"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d '{fileUrl}'";
-                await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
-                Debug.WriteLine(receiver.ToString());
+                await _syncService.Push(path, (UnixFileMode)Convert.ToInt32("660", 8), modified ?? DateTimeOffset.Now, content, cancellationToken);
+                //var receiver = new SyncTargetShellOutputReceiver();
+                //var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
+                //var command = $"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d '{fileUrl}'";
+                //await _adbClient.ExecuteRemoteCommandAsync(command, _device, receiver, cancellationToken);
+                //Debug.WriteLine(receiver.ToString());
             }
             finally
             {
@@ -178,25 +168,25 @@ namespace MusicSyncConverter.FileProviders.Adb
                 .Replace(Path.AltDirectorySeparatorChar, '/');
         }
 
-        private class SyncTargetShellOutputReceiver : IShellOutputReceiver
-        {
-            public bool ParsesErrors => false;
+        //private class SyncTargetShellOutputReceiver : IShellOutputReceiver
+        //{
+        //    public bool ParsesErrors => false;
 
-            public IList<string> Lines { get; private set; } = new List<string>();
+        //    public IList<string> Lines { get; private set; } = new List<string>();
 
-            public void AddOutput(string line)
-            {
-                Lines.Add(line);
-            }
+        //    public void AddOutput(string line)
+        //    {
+        //        Lines.Add(line);
+        //    }
 
-            public void Flush()
-            {
-            }
+        //    public void Flush()
+        //    {
+        //    }
 
-            public override string ToString()
-            {
-                return string.Join(Environment.NewLine, Lines);
-            }
-        }
+        //    public override string ToString()
+        //    {
+        //        return string.Join(Environment.NewLine, Lines);
+        //    }
+        //}
     }
 }
