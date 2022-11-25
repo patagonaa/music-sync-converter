@@ -4,6 +4,7 @@ using Microsoft.Extensions.Primitives;
 using MusicSyncConverter.FileProviders.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -15,29 +16,39 @@ namespace MusicSyncConverter.FileProviders.Adb
 {
     internal class AdbSyncTarget : ISyncTarget, IDisposable
     {
+        private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
+        private readonly string _deviceSerial;
         private readonly string _basePath;
         private readonly AdbServicesClient _adbClient;
-        private readonly string _deviceSerial;
         private readonly AdbSyncClient _syncService;
 
-        public AdbSyncTarget(string serial, string basePath)
+        private AdbSyncTarget(string deviceSerial, string basePath, AdbServicesClient adbClient, AdbSyncClient syncService)
         {
+            _deviceSerial = deviceSerial;
             _basePath = basePath;
-            _adbClient = new AdbServicesClient();
-            (_deviceSerial, _syncService) = Init(serial).Result;
+            _adbClient = adbClient;
+            _syncService = syncService;
         }
 
-        private async Task<(string Serial, AdbSyncClient SyncClient)> Init(string serial)
+        public static async Task<AdbSyncTarget> Create(string serial, string basePath)
         {
-            var devices = await _adbClient.GetDevices();
+            try
+            {
+                await Process.Start("adb", "start-server").WaitForExitAsync();
+            }
+            catch (Exception)
+            {
+            }
+
+            var adbClient = new AdbServicesClient();
+            var devices = await adbClient.GetDevices();
             var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
             if (device == default)
                 throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
-            var syncClient = await _adbClient.GetSyncClient(device.Serial);
-            return (device.Serial, syncClient);
-        }
+            var syncClient = await adbClient.GetSyncClient(device.Serial);
 
-        private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
+            return new AdbSyncTarget(device.Serial, basePath, adbClient, syncClient);
+        }
 
         private static bool IsRequestedDevice((string Serial, string _) device, string serial)
         {

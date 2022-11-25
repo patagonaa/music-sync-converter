@@ -52,8 +52,8 @@ Instead of just syncing from directory to directory you can use some different f
     - supports the query parameter `?fatSortMode=<mode>` where `<mode>` is `None`, `Folders`, `Files`, `FilesAndFolders` to sort the FAT32 table when directories change. This is useful for devices that don't sort files or directory by name.
 - (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices): `wpd://` (for example `wpd://My Android Phone/disk/Music`)
     - Don't expect this to be rock-solid. It's MTP, what do you expect?
-- ADB: `adb://` (for example `adb://abcdABCD12345678//storage/0815-ACAB/Music`)
-    - this requires an ADB daemon to be running
+- ADB: `adb://` (for example `adb://abcdABCD12345678//storage/0815-ACAB/Music` where `abcdABCD12345678` is the device serial number and `/storage/0815-ACAB/Music` is the base directory)
+    - this requires ADB to be installed globally (available in `PATH`) or an ADB daemon to be already running
 
 ### Excludes
 You can exclude files by adding directories to the `Exclude` array in the config file.
