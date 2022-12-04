@@ -30,7 +30,7 @@ namespace MusicSyncConverter.Playlists
                     var song = new PlaylistSong(line);
                     if (metaData.TryGetValue("EXTINF", out var extinf))
                     {
-                        song.Name = string.Join(',', extinf.Split(',')[1..]).Trim();
+                        song.Name = extinf.Split(',', 2)[1].Trim();
                     }
                     metaData.Clear();
 

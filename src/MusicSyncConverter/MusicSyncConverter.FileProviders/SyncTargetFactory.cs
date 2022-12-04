@@ -11,9 +11,11 @@ namespace MusicSyncConverter.FileProviders
 {
     public class SyncTargetFactory
     {
+        private static readonly char[] _pathSeperators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+
         public async Task<ISyncTarget> Get(string uriString)
         {
-            var splitUri = uriString.Split(':');
+            var splitUri = uriString.Split(':', 2);
             if (splitUri.Length < 2)
                 throw new ArgumentException("Uri must contain protocol");
 
@@ -34,16 +36,16 @@ namespace MusicSyncConverter.FileProviders
                         if (!OperatingSystem.IsWindows())
                             throw new PlatformNotSupportedException("_Windows_ Portable Devices is not supported on non-Windows systems.");
                         var wpdPath = uriString.Replace("wpd://", "");
-                        var pathParts = wpdPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        var pathParts = wpdPath.Split(_pathSeperators, 2);
 
-                        return new WpdSyncTarget(pathParts[0], string.Join(Path.DirectorySeparatorChar, pathParts[1..]));
+                        return new WpdSyncTarget(pathParts[0], pathParts[1]);
                     }
                 case "adb":
                     {
                         var adbPath = uriString.Replace("adb://", "");
-                        var pathParts = adbPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        var pathParts = adbPath.Split(_pathSeperators, 2);
 
-                        return await AdbSyncTarget.Create(pathParts[0], string.Join(Path.DirectorySeparatorChar, pathParts[1..]));
+                        return await AdbSyncTarget.Create(pathParts[0], pathParts[1]);
                     }
                 default:
                     throw new ArgumentException($"Invalid URI Scheme: {splitUri[0]}");

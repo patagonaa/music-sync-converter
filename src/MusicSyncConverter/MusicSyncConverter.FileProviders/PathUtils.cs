@@ -49,7 +49,7 @@ namespace MusicSyncConverter.FileProviders
                 Array.Reverse(partsArray);
                 return string.Join(Path.DirectorySeparatorChar, partsArray);
             }
-            else if (_multipleSeparators && path.Contains(Path.AltDirectorySeparatorChar))
+            else if (_multipleSeparators)
             {
                 return path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
             }

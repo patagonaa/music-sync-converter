@@ -10,7 +10,7 @@ namespace MusicSyncConverter.FileProviders
     {
         public IFileProvider Get(string uriString)
         {
-            var splitUri = uriString.Split(':');
+            var splitUri = uriString.Split(':', 2);
             if (splitUri.Length < 2)
                 throw new ArgumentException("Uri must contain protocol");
 
@@ -40,7 +40,7 @@ namespace MusicSyncConverter.FileProviders
 
         private NetworkCredential ParseUsernamePassword(string userPass)
         {
-            var split = userPass.Split(':');
+            var split = userPass.Split(':', 2);
             return new NetworkCredential(split[0], split[1]);
         }
     }
