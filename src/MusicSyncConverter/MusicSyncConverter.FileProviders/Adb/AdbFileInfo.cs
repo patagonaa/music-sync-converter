@@ -34,7 +34,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public Stream CreateReadStream()
         {
-            var ms = new MemoryStream(_item.Size);
+            var ms = new MemoryStream(checked((int)_item.Size));
             _syncService.Pull(FullPath, ms).Wait();
             return ms;
         }
