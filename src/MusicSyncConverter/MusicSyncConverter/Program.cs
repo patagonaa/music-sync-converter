@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using System;
 using System.Linq;
@@ -36,25 +37,15 @@ namespace MusicSyncConverter
 
             Console.CancelKeyPress += (o, e) => { cts.Cancel(); e.Cancel = true; };
 
+            var logger = new MemoryLogger();
             try
             {
-                var logger = new MemoryLogger();
                 var tempFileService = new TempFileService();
                 tempFileService.CleanupTempDir(cts.Token);
                 using (var tempFileSession = tempFileService.GetNewSession())
                 {
                     var service = new SyncService(tempFileSession, logger);
                     await service.Run(config, cts.Token);
-                }
-
-                foreach (var fileGroup in logger.Messages.Distinct().GroupBy(x => x.Filename).OrderBy(x => x.Key))
-                {
-                    Console.WriteLine($"[{fileGroup.Key}]");
-                    foreach (var item in fileGroup.OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))
-                    {
-                        Console.WriteLine($"\t{item.LogLevel}: {item.Message.ReplaceLineEndings($"{Environment.NewLine}\t")}");
-                    }
-                    Console.WriteLine();
                 }
             }
             catch (OperationCanceledException)
@@ -65,6 +56,18 @@ namespace MusicSyncConverter
                 if (ex.Flatten().InnerExceptions.Any(x => x is not OperationCanceledException))
                 {
                     throw;
+                }
+            }
+            finally
+            {
+                foreach (var fileGroup in logger.Messages.Distinct().GroupBy(x => x.Filename).OrderBy(x => x.Key))
+                {
+                    Console.WriteLine($"[{fileGroup.Key}]");
+                    foreach (var item in fileGroup.OrderByDescending(x => x.LogLevel).ThenBy(x => x.Message))
+                    {
+                        Console.WriteLine($"\t{item.LogLevel}: {item.Message.ReplaceLineEndings($"{Environment.NewLine}\t")}");
+                    }
+                    Console.WriteLine();
                 }
             }
         }
