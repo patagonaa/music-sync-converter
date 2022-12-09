@@ -4,6 +4,7 @@ using MusicSyncConverter.FileProviders.Physical;
 using MusicSyncConverter.FileProviders.Wpd;
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
@@ -13,7 +14,7 @@ namespace MusicSyncConverter.FileProviders
     {
         private static readonly char[] _pathSeperators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
 
-        public async Task<ISyncTarget> Get(string uriString)
+        public async Task<ISyncTarget> Get(string uriString, CancellationToken cancellationToken)
         {
             var splitUri = uriString.Split(':', 2);
             if (splitUri.Length < 2)
@@ -45,7 +46,7 @@ namespace MusicSyncConverter.FileProviders
                         var adbPath = uriString.Replace("adb://", "");
                         var pathParts = adbPath.Split(_pathSeperators, 2);
 
-                        return await AdbSyncTarget.Create(pathParts[0], pathParts[1]);
+                        return await AdbSyncTarget.Create(pathParts[0], pathParts[1], cancellationToken);
                     }
                 default:
                     throw new ArgumentException($"Invalid URI Scheme: {splitUri[0]}");

@@ -30,24 +30,42 @@ namespace MusicSyncConverter.FileProviders.Adb
             _syncService = syncService;
         }
 
-        public static async Task<AdbSyncTarget> Create(string serial, string basePath)
+        public static async Task<AdbSyncTarget> Create(string serial, string basePath, CancellationToken cancellationToken)
         {
             try
             {
-                await Process.Start("adb", "start-server").WaitForExitAsync();
+                await Process.Start("adb", "start-server").WaitForExitAsync(cancellationToken);
             }
             catch (Exception)
             {
             }
 
             var adbClient = new AdbServicesClient();
-            var devices = await adbClient.GetDevices();
-            var device = devices.FirstOrDefault(x => IsRequestedDevice(x, serial));
-            if (device == default)
-                throw new ArgumentException($"Device {serial} not found! Available devices: {string.Join(";", devices.Select(x => x.Serial))}");
-            var syncClient = await adbClient.GetSyncClient(device.Serial);
+            var devices = await adbClient.GetDevices(cancellationToken);
+            var actualSerial = devices.FirstOrDefault(x => IsRequestedDevice(x, serial)).Serial;
+            if (actualSerial == null)
+            {
+                Console.WriteLine($"Device {serial} not found!" + (devices.Count > 0 ? $" Available devices: {string.Join(";", devices.Select(x => x.Serial))}" : string.Empty));
+                Console.WriteLine("Waiting for device...");
 
-            return new AdbSyncTarget(device.Serial, basePath, adbClient, syncClient);
+                var trackDevicesCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                await foreach (var deviceStatus in adbClient.TrackDevices(cancellationToken))
+                {
+                    Console.WriteLine(deviceStatus.ToString());
+                    if (IsRequestedDevice(deviceStatus, serial) && deviceStatus.State == "device")
+                    {
+                        actualSerial = deviceStatus.Serial;
+                        trackDevicesCts.Cancel();
+                        break;
+                    }
+                }
+                Debug.Assert(actualSerial != null);
+
+                Console.WriteLine("Found device!");
+            }
+            var syncClient = await adbClient.GetSyncClient(actualSerial, cancellationToken);
+
+            return new AdbSyncTarget(actualSerial, basePath, adbClient, syncClient);
         }
 
         private static bool IsRequestedDevice((string Serial, string _) device, string serial)

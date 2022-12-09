@@ -81,7 +81,7 @@ namespace MusicSyncConverter
             var fileProvider = _fileProviderFactory.Get(config.SourceDir);
             using (fileProvider as IDisposable)
             {
-                var syncTarget = await _syncTargetFactory.Get(config.TargetDir);
+                var syncTarget = await _syncTargetFactory.Get(config.TargetDir, cancellationToken);
                 using (syncTarget as IDisposable)
                 {
                     var targetCaseSensitive = syncTarget.IsCaseSensitive();
