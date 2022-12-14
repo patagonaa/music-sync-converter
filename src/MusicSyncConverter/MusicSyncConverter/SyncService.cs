@@ -104,7 +104,7 @@ namespace MusicSyncConverter
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // group files by their directory before comparing so we don't have to do a directory listing for every file
-                    var groupSongsByDirectoryBlock = CustomBlocks.GetGroupByBlock<SongSyncInfo, string>(x => Path.GetDirectoryName(x.TargetPath)!, targetPathComparer);
+                    var groupSongsByDirectoryBlock = CustomBlocks.GetGroupByBlock<SongSyncInfo, NormalizedPath>(x => new NormalizedPath(Path.GetDirectoryName(x.TargetPath)!), targetPathComparer);
                     groupSongsByDirectoryBlock.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
                     var getSyncInfoBlock = new TransformManyBlock<SourceFileInfo, SongSyncInfo>(x => FilterNull(GetSyncInfo(x, config)), workerOptions);
@@ -448,7 +448,7 @@ namespace MusicSyncConverter
 
             Debug.Assert(syncInfos.All(x => targetPathComparer.Equals(Path.GetDirectoryName(x.TargetPath), proposedDirPath)), "CompareSongDates can only compare batches of files in the same directory");
 
-            var duplicateFiles = syncInfos.GroupBy(x => Path.GetFileNameWithoutExtension(x.TargetPath), targetPathComparer).Where(group => group.Count() > 1);
+            var duplicateFiles = syncInfos.GroupBy(x => new NormalizedPath(Path.GetFileNameWithoutExtension(x.TargetPath)), targetPathComparer).Where(group => group.Count() > 1).ToList();
             if (duplicateFiles.Any())
             {
                 foreach (var duplicateFile in duplicateFiles)
@@ -667,13 +667,17 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(ISyncTarget syncTarget, ConcurrentBag<FileSourceTargetInfo> handledFiles, IEqualityComparer<string> targetPathComparer, CancellationToken cancellationToken)
+        private void DeleteAdditionalFiles(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer targetPathComparer, CancellationToken cancellationToken)
         {
             var files = GetAllFiles("", syncTarget);
             var toDelete = new List<IFileInfo>();
+
+            var normalizedHandledFiles = handledFiles.Select(x => new NormalizedPath(x.TargetPath)).ToHashSet();
             foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                var normalizedPath = new NormalizedPath(path);
 
                 if (PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
                 {
@@ -681,7 +685,7 @@ namespace MusicSyncConverter
                     continue;
                 }
 
-                if (!handledFiles.Any(x => targetPathComparer.Equals(x.TargetPath, path)))
+                if (!normalizedHandledFiles.Contains(normalizedPath, targetPathComparer))
                 {
                     toDelete.Add(file);
                     Console.WriteLine($"Delete {path}");

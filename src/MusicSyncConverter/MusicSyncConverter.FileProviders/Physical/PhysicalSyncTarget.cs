@@ -16,7 +16,7 @@ namespace MusicSyncConverter.FileProviders.Physical
         private readonly string _basePath;
         private readonly FatSortMode _sortMode;
         private readonly bool _isCaseSensitive;
-        private readonly ConcurrentDictionary<string, object?> _updatedDirectories;
+        private readonly ConcurrentDictionary<NormalizedPath, object?> _updatedDirectories;
         private readonly FatSorter _fatSorter;
 
         public PhysicalSyncTarget(string basePath, FatSortMode sortMode)
@@ -25,7 +25,7 @@ namespace MusicSyncConverter.FileProviders.Physical
             _basePath = basePath;
             _sortMode = sortMode;
             _isCaseSensitive = IsCaseSensitiveInternal(basePath);
-            _updatedDirectories = new ConcurrentDictionary<string, object?>(new PathComparer(_isCaseSensitive)); // there is no ConcurrentHashSet so we use the ConcurrentDictionary for that
+            _updatedDirectories = new ConcurrentDictionary<NormalizedPath, object?>(new PathComparer(_isCaseSensitive)); // there is no ConcurrentHashSet so we use the ConcurrentDictionary for that
             _fatSorter = new FatSorter();
         }
 
@@ -34,13 +34,13 @@ namespace MusicSyncConverter.FileProviders.Physical
             var absolutePath = Path.Join(_basePath, path);
 
             var dirInfo = new DirectoryInfo(Path.GetDirectoryName(absolutePath)!);
-            _updatedDirectories.TryAdd(dirInfo.FullName, null);
+            _updatedDirectories.TryAdd(new NormalizedPath(dirInfo.FullName), null);
             while (!dirInfo.Exists)
             {
                 dirInfo = dirInfo.Parent;
                 if (dirInfo == null)
                     throw new InvalidOperationException($"Parent should not be null! {absolutePath}");
-                _updatedDirectories.TryAdd(dirInfo.FullName, null);
+                _updatedDirectories.TryAdd(new NormalizedPath(dirInfo.FullName), null);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
@@ -112,9 +112,9 @@ namespace MusicSyncConverter.FileProviders.Physical
 
         public Task Complete(CancellationToken cancellationToken)
         {
-            foreach (var updatedDir in _updatedDirectories.Keys.OrderByDescending(x => x.Length))
+            foreach (var updatedDir in _updatedDirectories.Keys.OrderByDescending(x => x.Path.Length))
             {
-                _fatSorter.Sort(updatedDir, _sortMode, false, cancellationToken);
+                _fatSorter.Sort(updatedDir.Path, _sortMode, false, cancellationToken);
             }
             return Task.CompletedTask;
         }

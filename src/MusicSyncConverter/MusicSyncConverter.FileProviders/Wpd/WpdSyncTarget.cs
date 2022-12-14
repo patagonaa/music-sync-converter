@@ -29,8 +29,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly IPortableDeviceProperties _contentProperties;
         private readonly string _basePath;
         private readonly PathComparer _pathComparer;
-        private readonly Dictionary<string, IDirectoryContents> _directoryContentsCache;
-        private readonly Dictionary<string, string> _objectIdCache;
+        private readonly Dictionary<NormalizedPath, IDirectoryContents> _directoryContentsCache;
+        private readonly Dictionary<NormalizedPath, string> _objectIdCache;
 
         public WpdSyncTarget(string friendlyName, string basePath)
         {
@@ -39,8 +39,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
             _contentProperties = _content.Properties();
             _basePath = basePath;
             _pathComparer = new PathComparer(IsCaseSensitive());
-            _directoryContentsCache = new Dictionary<string, IDirectoryContents>(_pathComparer);
-            _objectIdCache = new Dictionary<string, string>(_pathComparer);
+            _directoryContentsCache = new Dictionary<NormalizedPath, IDirectoryContents>(_pathComparer);
+            _objectIdCache = new Dictionary<NormalizedPath, string>(_pathComparer);
         }
 
         private static IPortableDevice GetDevice(string toFind)
@@ -195,13 +195,14 @@ namespace MusicSyncConverter.FileProviders.Wpd
 
         public IDirectoryContents GetDirectoryContents(string subPath)
         {
+            var normalizedSubPath = new NormalizedPath(subPath);
             lock (_syncLock)
             {
-                if (!_directoryContentsCache.TryGetValue(subPath, out IDirectoryContents? directoryContents))
+                if (!_directoryContentsCache.TryGetValue(normalizedSubPath, out IDirectoryContents? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
                     directoryContents = obj == null ? NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _content, _contentProperties);
-                    _directoryContentsCache.TryAdd(subPath, directoryContents);
+                    _directoryContentsCache.TryAdd(normalizedSubPath, directoryContents);
                 }
                 return directoryContents;
             }
@@ -229,7 +230,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
                     string? pathPart = pathParts[i];
                     currentPath = Path.Join(currentPath, pathPart);
 
-                    if (_objectIdCache.TryGetValue(currentPath, out var foundObjId))
+                    NormalizedPath normalizedCurrentPath = new NormalizedPath(currentPath);
+                    if (_objectIdCache.TryGetValue(normalizedCurrentPath, out var foundObjId))
                     {
                         currentObject = foundObjId;
                     }
@@ -249,7 +251,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
                         }
                         if (foundChild)
                         {
-                            _objectIdCache[currentPath] = currentObject;
+                            _objectIdCache[normalizedCurrentPath] = currentObject;
                             continue;
                         }
                         return null;

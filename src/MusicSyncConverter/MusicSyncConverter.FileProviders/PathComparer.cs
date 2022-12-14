@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics;
 
 namespace MusicSyncConverter.FileProviders
 {
-    public class PathComparer : IEqualityComparer<string>
+    public class PathComparer : IEqualityComparer<NormalizedPath>
     {
         private readonly StringComparer _internalComparer;
 
@@ -17,24 +17,28 @@ namespace MusicSyncConverter.FileProviders
         {
             if (_internalComparer.Equals(x, y))
                 return true;
-            return _internalComparer.Equals(PathUtils.NormalizePath(x), PathUtils.NormalizePath(y));
+            return Equals(x is null ? null : new NormalizedPath(x), y is null ? null : new NormalizedPath(y));
         }
 
         public bool FileNameEquals(string? x, string? y)
         {
-#if DEBUG
-            if (PathUtils.HasPathSeperator(x) || PathUtils.HasPathSeperator(y))
-                throw new ArgumentException("FileNameEquals may not be called with paths!");
-#endif
+            Debug.Assert(!PathUtils.HasPathSeperator(x) && !PathUtils.HasPathSeperator(y), "FileNameEquals may not be called with paths!");
             return _internalComparer.Equals(x, y);
         }
 
-        public int GetHashCode(string? obj)
+        public bool Equals(NormalizedPath? x, NormalizedPath? y)
         {
-            if (obj == null)
-                return 0;
+            return _internalComparer.Equals(x?.Path, y?.Path);
+        }
 
-            return _internalComparer.GetHashCode(PathUtils.NormalizePath(obj));
+        public int GetHashCode(NormalizedPath obj)
+        {
+            if (obj is null)
+            {
+                throw new ArgumentNullException(nameof(obj));
+            }
+
+            return _internalComparer.GetHashCode(obj.Path);
         }
     }
 }
