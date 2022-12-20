@@ -30,7 +30,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public bool IsDirectory => _item.Mode.HasFlag(UnixFileMode.Directory);
 
-        public string FullPath => AdbSyncTarget.UnixizePath(Path.Join(_directory, _item.Path));
+        public string FullPath => PathUtils.UnixizePath(Path.Join(_directory, _item.Path));
 
         public Stream CreateReadStream()
         {

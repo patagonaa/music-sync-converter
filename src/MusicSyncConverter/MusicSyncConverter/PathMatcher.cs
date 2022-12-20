@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -12,6 +13,7 @@ namespace MusicSyncConverter
     {
         private readonly string _pathSeperatorRegex;
         private readonly string _notPathSeperatorRegex;
+        private readonly ConcurrentDictionary<(string Glob, bool CaseSensitive), Regex> _globCache = new();
 
         public PathMatcher()
         {
@@ -26,6 +28,12 @@ namespace MusicSyncConverter
         }
 
         public bool Matches(string glob, string path, bool caseSensitive)
+        {
+            var regex = _globCache.GetOrAdd((glob, caseSensitive), key => GetRegexForGlob(key.Glob, key.CaseSensitive));
+            return regex.IsMatch(path);
+        }
+
+        private Regex GetRegexForGlob(string glob, bool caseSensitive)
         {
             if (glob.Contains("***"))
                 throw new ArgumentException("only '*' and '**' wildcards are allowed");
@@ -47,8 +55,7 @@ namespace MusicSyncConverter
             sb.Replace("::singlepartwildcard::", $"{_notPathSeperatorRegex}*");
             sb.Replace("::pathseperator::", _pathSeperatorRegex);
 
-            var regex = new Regex(sb.ToString(), caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
-            return regex.IsMatch(path);
+            return new Regex(sb.ToString(), caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
         }
     }
 }

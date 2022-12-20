@@ -128,7 +128,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public IDirectoryContents GetDirectoryContents(string subpath)
         {
-            var path = UnixizePath(Path.Join(_basePath, subpath));
+            var path = PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
 
             var stat = _syncService.Stat(path).Result;
             if (stat.Mode == 0)
@@ -140,7 +140,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public IFileInfo GetFileInfo(string subpath)
         {
-            var path = UnixizePath(Path.Join(_basePath, subpath));
+            var path = PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
 
             var stat = _syncService.Stat(path).Result;
             return new AdbFileInfo(path, stat, _syncService);
@@ -171,13 +171,6 @@ namespace MusicSyncConverter.FileProviders.Adb
                     throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
                 }
             }
-        }
-
-        internal static string UnixizePath(string path)
-        {
-            return path
-                .Replace(Path.DirectorySeparatorChar, '/')
-                .Replace(Path.AltDirectorySeparatorChar, '/');
         }
     }
 }

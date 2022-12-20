@@ -26,6 +26,13 @@ namespace MusicSyncConverter.FileProviders
             _levelChangeStrings = levelChangeStrings.ToArray();
         }
 
+        public static string MakeUnixPath(string path)
+        {
+            return path
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/');
+        }
+
         public static bool HasPathSeperator(string? x)
         {
             return x != null && (x.Contains(Path.DirectorySeparatorChar) || (_multipleSeparators && x.Contains(Path.AltDirectorySeparatorChar)));
