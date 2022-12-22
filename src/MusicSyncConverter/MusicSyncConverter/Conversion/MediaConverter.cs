@@ -1,11 +1,10 @@
 ﻿using FFMpegCore;
-using FFMpegCore.Arguments;
-using FFMpegCore.Enums;
 using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Tags;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -310,82 +309,101 @@ namespace MusicSyncConverter.Conversion
 
         private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
         {
-            var args = FFMpegArguments
-                .FromFileInput(sourcePath);
-            var hasExternalCover = encoderInfo.CoverCodec != null && externalCoverPath != null;
-            if (hasExternalCover)
+            var args = new List<string>();
+            args.AddRange(new[] { "-i", sourcePath });
+
+            var coverSupported = !string.IsNullOrEmpty(encoderInfo.CoverCodec);
+
+            var hasExternalCover = externalCoverPath != null;
+            if (coverSupported && hasExternalCover)
             {
-                args.AddFileInput(externalCoverPath!);
+                args.AddRange(new[] { "-i", externalCoverPath! });
             }
 
-            var argsProcessor = args.OutputToFile(outFilePath, true, x => // we do not use pipe output here because ffmpeg can't write the header correctly when we use streams
-            {
-                x.WithArgument(new CustomArgument("-map 0:a"));
+            args.AddRange(new[] { "-map", "0:a" });
 
+            if (coverSupported)
+            {
                 if (hasEmbeddedCover)
                 {
-                    x.WithArgument(new CustomArgument("-map 0:v -disposition:v attached_pic"));
+                    args.AddRange(new[] { "-map", "0:v", "-disposition:v", "attached_pic" });
                 }
                 else if (hasExternalCover)
                 {
-                    x.WithArgument(new CustomArgument("-map 1:v -disposition:v attached_pic"));
+                    args.AddRange(new[] { "-map", "1:v", "-disposition:v", "attached_pic" });
                 }
+            }
 
-                x.WithAudioCodec(encoderInfo.Codec);
+            args.AddRange(new[] { "-map_metadata", "-1" });
 
-                if (encoderInfo.Channels.HasValue)
-                {
-                    x.WithArgument(new CustomArgument($"-ac {encoderInfo.Channels.Value}"));
-                }
 
-                if (encoderInfo.SampleRateHz.HasValue)
-                {
-                    x.WithAudioSamplingRate(encoderInfo.SampleRateHz.Value);
-                }
+            args.AddRange(new[] { "-c:a", encoderInfo.Codec });
 
-                if (encoderInfo.Bitrate.HasValue)
-                {
-                    x.WithAudioBitrate(encoderInfo.Bitrate.Value);
-                }
+            if (!string.IsNullOrEmpty(encoderInfo.Profile))
+            {
+                args.AddRange(new[] { "-profile:a", encoderInfo.Profile });
+            }
 
-                if (!string.IsNullOrEmpty(encoderInfo.Profile))
-                {
-                    x.WithArgument(new CustomArgument($"-profile:a {encoderInfo.Profile}"));
-                }
-                x.WithoutMetadata();
-                if (tags != null)
-                {
-                    foreach (var tag in tags)
-                    {
-                        x.WithArgument(new CustomArgument($"-metadata {tag.Key}=\"{tag.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""));
-                    }
-                }
+            if (encoderInfo.Channels.HasValue)
+            {
+                args.AddRange(new[] { "-ac", encoderInfo.Channels.Value.ToString() });
+            }
 
-                if (!string.IsNullOrEmpty(encoderInfo.CoverCodec))
-                {
-                    x.WithVideoCodec(encoderInfo.CoverCodec);
-                    if (encoderInfo.MaxCoverSize != null)
-                    {
-                        x.WithArgument(new CustomArgument($"-vf \"scale='min({encoderInfo.MaxCoverSize.Value},iw)':min'({encoderInfo.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease\""));
-                    }
-                }
-                else
-                {
-                    x.DisableChannel(Channel.Video);
-                }
+            if (encoderInfo.SampleRateHz.HasValue)
+            {
+                args.AddRange(new[] { "-ar", encoderInfo.SampleRateHz.Value.ToString() });
+            }
 
-                x.ForceFormat(encoderInfo.Muxer);
+            if (encoderInfo.Bitrate.HasValue)
+            {
+                args.AddRange(new[] { "-b:a", encoderInfo.Bitrate.Value.ToString() });
+            }
 
-                if (!string.IsNullOrEmpty(encoderInfo.AdditionalFlags))
+            if (tags != null)
+            {
+                foreach (var tag in tags)
                 {
-                    x.WithArgument(new CustomArgument(encoderInfo.AdditionalFlags));
+                    args.AddRange(new[] { "-metadata", $"{tag.Key}={tag.Value}" });
                 }
-            });
-            argsProcessor.CancellableThrough(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            await argsProcessor
-                //.NotifyOnProgress(x => Console.WriteLine($"{workItem.SourceFileInfo.AbsolutePath} {x.ToString()}"))
-                .ProcessAsynchronously();
+            }
+
+            if (!string.IsNullOrEmpty(encoderInfo.CoverCodec))
+            {
+                args.AddRange(new[] { "-c:v", encoderInfo.CoverCodec });
+                if (encoderInfo.MaxCoverSize != null)
+                {
+                    args.AddRange(new[] { "-vf", $"scale='min({encoderInfo.MaxCoverSize.Value},iw)':min'({encoderInfo.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease" });
+                }
+            }
+            else
+            {
+                args.AddRange(new[] { "-vn" });
+            }
+
+            if (!string.IsNullOrEmpty(encoderInfo.AdditionalFlags))
+            {
+                args.AddRange(encoderInfo.AdditionalFlags.Split(' '));
+            }
+            args.AddRange(new[] { "-f", encoderInfo.Muxer });
+            args.Add(outFilePath);
+
+
+            var startInfo = new ProcessStartInfo("ffmpeg") { UseShellExecute = false };
+            startInfo.RedirectStandardError = true;
+            startInfo.RedirectStandardOutput = true;
+            foreach (var arg in args)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+            var process = new Process { StartInfo = startInfo };
+
+            process.OutputDataReceived += (o, e) => Debug.WriteLine(e.Data);
+            process.ErrorDataReceived += (o, e) => Debug.WriteLine(e.Data);
+
+            process.Start();
+            process.BeginErrorReadLine();
+            process.BeginOutputReadLine();
+            await process.WaitForExitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return outFilePath;
         }
