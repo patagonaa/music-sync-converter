@@ -1,12 +1,13 @@
-﻿using FFMpegCore;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Conversion.Ffmpeg;
 using MusicSyncConverter.Tags;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -44,10 +45,10 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Cannot convert files not in SourceExtensions");
             }
 
-            IMediaAnalysis mediaAnalysis;
+            FfProbeResult mediaAnalysis;
             try
             {
-                mediaAnalysis = await FFProbe.AnalyseAsync(inputFile);
+                mediaAnalysis = await AnalyseAsync(inputFile, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -58,7 +59,7 @@ namespace MusicSyncConverter.Conversion
             tags = FilterTags(tags);
             tags = SanitizeTags(tags, originalFilePath, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
 
-            var audioStream = mediaAnalysis.PrimaryAudioStream;
+            var audioStream = mediaAnalysis.Streams.SingleOrDefault(x => x.CodecType == FfProbeCodecType.Audio);
 
             if (audioStream == null)
             {
@@ -89,12 +90,28 @@ namespace MusicSyncConverter.Conversion
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
 
             var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
-            await Convert(inputFile, mediaAnalysis.PrimaryVideoStream != null, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
+            await Convert(inputFile, mediaAnalysis.Streams.Any(x => x.CodecType == FfProbeCodecType.Video), albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
 
             if (tagWriter != null)
                 await tagWriter.SetTags(tags, outputFile, cancellationToken);
 
             return (outputFile, encoderInfo.Extension);
+        }
+
+        private static async Task<FfProbeResult> AnalyseAsync(string inputFile, CancellationToken cancellationToken)
+        {
+            var args = new[]
+            {
+                "-loglevel", "error",
+                "-print_format", "json",
+                "-show_format",
+                "-show_streams",
+                inputFile
+            };
+
+            using var stdout = new StringWriter();
+            await RunProcess("ffprobe", args, stdout, cancellationToken);
+            return JsonSerializer.Deserialize<FfProbeResult>(stdout.ToString()) ?? throw new ArgumentException("ffprobe result was null");
         }
 
         private IReadOnlyList<KeyValuePair<string, string>> FilterTags(IReadOnlyList<KeyValuePair<string, string>> tags)
@@ -176,7 +193,7 @@ namespace MusicSyncConverter.Conversion
             return toReturn;
         }
 
-        private EncoderInfo GetEncoderInfoRemux(IMediaAnalysis mediaAnalysis, string sourceExtension, EncoderInfo fallbackFormat)
+        private EncoderInfo GetEncoderInfoRemux(FfProbeResult mediaAnalysis, string sourceExtension, EncoderInfo fallbackFormat)
         {
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
@@ -285,7 +302,7 @@ namespace MusicSyncConverter.Conversion
             }
         }
 
-        private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, AudioStream audioStream)
+        private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, FfProbeStream audioStream)
         {
             foreach (var supportedFormat in supportedFormats)
             {
@@ -297,7 +314,7 @@ namespace MusicSyncConverter.Conversion
             return false;
         }
 
-        private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, AudioStream audioStream)
+        private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, FfProbeStream audioStream)
         {
             return (limitation.Extension == null || limitation.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
                                 (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
@@ -307,7 +324,7 @@ namespace MusicSyncConverter.Conversion
                                 (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
         }
 
-        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
+        private static async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
         {
             var args = new List<string>();
             args.AddRange(new[] { "-i", sourcePath });
@@ -387,25 +404,40 @@ namespace MusicSyncConverter.Conversion
             args.AddRange(new[] { "-f", encoderInfo.Muxer });
             args.Add(outFilePath);
 
+            await RunProcess("ffmpeg", args, null, cancellationToken);
+            return outFilePath;
+        }
 
-            var startInfo = new ProcessStartInfo("ffmpeg") { UseShellExecute = false };
-            startInfo.RedirectStandardError = true;
-            startInfo.RedirectStandardOutput = true;
+        private static async Task RunProcess(string command, IList<string> args, TextWriter? stdout, CancellationToken cancellationToken)
+        {
+            var startInfo = new ProcessStartInfo(command)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
             foreach (var arg in args)
             {
                 startInfo.ArgumentList.Add(arg);
             }
-            var process = new Process { StartInfo = startInfo };
+            using var process = new Process { StartInfo = startInfo };
+            using var stderr = new StringWriter();
 
-            process.OutputDataReceived += (o, e) => Debug.WriteLine(e.Data);
-            process.ErrorDataReceived += (o, e) => Debug.WriteLine(e.Data);
+            if (stdout != null)
+                process.OutputDataReceived += (o, e) => stdout.WriteLine(e.Data);
+
+            process.ErrorDataReceived += (o, e) => stderr.WriteLine(e.Data);
 
             process.Start();
-            process.BeginErrorReadLine();
             process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
             await process.WaitForExitAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            return outFilePath;
+
+            if (process.ExitCode != 0)
+            {
+                throw new Exception($"Exit Code {process.ExitCode} while running {command}." + Environment.NewLine + stderr.ToString());
+            }
         }
     }
 }
