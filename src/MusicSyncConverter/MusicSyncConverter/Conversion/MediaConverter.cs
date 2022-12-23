@@ -356,7 +356,7 @@ namespace MusicSyncConverter.Conversion
 
             if (encoderInfo.Bitrate.HasValue)
             {
-                args.AddRange(new[] { "-b:a", encoderInfo.Bitrate.Value.ToString() });
+                args.AddRange(new[] { "-b:a", (encoderInfo.Bitrate.Value * 1000).ToString() });
             }
 
             if (tags != null)
