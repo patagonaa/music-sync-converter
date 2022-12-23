@@ -123,7 +123,15 @@ namespace MusicSyncConverter
                     }
                     else
                     {
-                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => await FilterNull(AddLogContext(x.PlaylistFileInfo, null, () => ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken))), workerOptions);
+                        var convertPlaylistOptions = new ExecutionDataflowBlockOptions
+                        {
+                            BoundedCapacity = -1, // if this has a bound, too many playlists (with not-yet-converted songs) at once may block readPlaylistBlock, which blocks fileRouterBlock, which blocks everything.
+                            MaxDegreeOfParallelism = config.WorkersConvert ?? Environment.ProcessorCount,
+                            EnsureOrdered = false,
+                            CancellationToken = cancellationToken
+                        };
+
+                        var convertPlaylistBlockSpecific = new TransformManyBlock<Playlist, OutputFile>(async x => await FilterNull(AddLogContext(x.PlaylistFileInfo, null, () => ConvertPlaylist(x, config, syncTarget, sourcePathComparer, handledFiles, handledFilesComplete.Token, cancellationToken))), convertPlaylistOptions);
                         readPlaylistBlock.LinkTo(convertPlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
                         convertPlaylistBlockSpecific.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = false });
                         convertPlaylistBlock = convertPlaylistBlockSpecific;
