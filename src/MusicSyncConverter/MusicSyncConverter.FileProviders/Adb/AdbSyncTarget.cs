@@ -42,7 +42,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
             var adbClient = new AdbServicesClient();
             var devices = await adbClient.GetDevices(cancellationToken);
-            var actualSerial = devices.FirstOrDefault(x => IsRequestedDevice(x, serial)).Serial;
+            var actualSerial = devices.FirstOrDefault(x => IsRequestedDevice(x, serial) && x.State == "device").Serial;
             if (actualSerial == null)
             {
                 Console.WriteLine($"Device {serial} not found!" + (devices.Count > 0 ? $" Available devices: {string.Join(";", devices.Select(x => x.Serial))}" : string.Empty));
