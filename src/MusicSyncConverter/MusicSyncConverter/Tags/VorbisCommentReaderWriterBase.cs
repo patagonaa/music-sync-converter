@@ -1,4 +1,4 @@
-﻿using FFMpegCore;
+﻿using MusicSyncConverter.Conversion.Ffmpeg;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,7 +20,7 @@ namespace MusicSyncConverter.Tags
             _tempFileSession = tempFileSession;
         }
 
-        public async Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(IMediaAnalysis mediaAnalysis, string fileName, string fileExtension, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(FfProbeResult mediaAnalysis, string fileName, string fileExtension, CancellationToken cancellationToken)
         {
             var tagFile = _tempFileSession.GetTempFilePath();
             await ExportTags(tagFile, fileName, cancellationToken);
