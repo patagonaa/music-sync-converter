@@ -28,6 +28,7 @@ namespace MusicSyncConverter
         private readonly MediaConverter _converter;
         private readonly PathMatcher _pathMatcher;
         private readonly PlaylistParser _playlistParser;
+        private readonly PlaylistWriter _playlistWriter;
         private static readonly TimeSpan _fileTimestampDelta = TimeSpan.FromSeconds(2); // FAT32 write time has 2 seconds precision
         private readonly ITempFileSession _tempFileSession;
         private readonly ILogger _logger;
@@ -40,6 +41,7 @@ namespace MusicSyncConverter
             _converter = new MediaConverter(tempFileSession, logger);
             _pathMatcher = new PathMatcher();
             _playlistParser = new PlaylistParser();
+            _playlistWriter = new PlaylistWriter();
             _tempFileSession = tempFileSession;
             _logger = logger;
         }
@@ -374,53 +376,57 @@ namespace MusicSyncConverter
             var playlistFile = playlist.PlaylistFileInfo;
 
             var playlistPath = _sanitizer.SanitizeText(syncConfig.DeviceConfig.PathCharacterLimitations, playlistFile.Path, true, out _);
+
+            var playlistTargetSongs = new List<PlaylistSong>();
+            var allSongsFound = true;
+            foreach (var song in playlist.Songs)
+            {
+                if (Path.IsPathRooted(song.Path))
+                    throw new InvalidOperationException($"Playlist song paths must not be absolute! In {playlist.PlaylistFileInfo.Path}");
+
+                string? playlistDirectoryPath = Path.GetDirectoryName(playlistFile.Path);
+                if (playlistDirectoryPath == null)
+                    throw new ArgumentException($"Playlist path {playlistDirectoryPath} is invalid");
+                var sourcePath = Path.Join(playlistDirectoryPath, song.Path);
+
+                string? targetFilePath = null;
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var handledFilesComplete = handledFilesCompleteToken.IsCancellationRequested;
+                    var songMapping = handledFiles.FirstOrDefault(x => sourcePathComparer.Equals(x.SourcePath, sourcePath));
+                    if (songMapping != null)
+                    {
+                        targetFilePath = songMapping.TargetPath;
+                        break;
+                    }
+                    if (handledFilesComplete)
+                    {
+                        _logger.LogWarning("Missing song {SourcePath} referenced in playlist {PlaylistPath}", sourcePath, playlistFile.Path);
+                        allSongsFound = false;
+                        break;
+                    }
+                    await Task.Delay(1000, cancellationToken);
+                }
+                if (targetFilePath == null)
+                    continue;
+
+                string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
+                playlistTargetSongs.Add(new PlaylistSong(Path.GetRelativePath(playlistDirectoryPath, targetFilePath), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)));
+            }
+
             var targetPlaylistFileInfo = syncTarget.GetFileInfo(playlistPath);
-            if (targetPlaylistFileInfo.Exists && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
+            if (allSongsFound && targetPlaylistFileInfo.Exists && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
             {
                 handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath));
                 return null;
             }
 
-            var allSongsFound = true;
-
             var tmpFilePath = _tempFileSession.GetTempFilePath();
+
             using (var sw = File.CreateText(tmpFilePath))
             {
                 sw.NewLine = "\r\n";
-                sw.WriteLine("#EXTM3U");
-                foreach (var song in playlist.Songs)
-                {
-                    string? playlistDirectoryPath = Path.GetDirectoryName(playlistFile.Path);
-                    if (playlistDirectoryPath == null)
-                        throw new ArgumentException($"Playlist path {playlistDirectoryPath} is invalid");
-                    var playlistSongPath = Path.Join(playlistDirectoryPath, song.Path);
-
-                    string? targetFilePath;
-                    while (true)
-                    {
-                        var handledFilesComplete = handledFilesCompleteToken.IsCancellationRequested;
-                        var songMapping = handledFiles.FirstOrDefault(x => sourcePathComparer.Equals(x.SourcePath, playlistSongPath));
-                        if (songMapping != null)
-                        {
-                            targetFilePath = songMapping.TargetPath;
-                            break;
-                        }
-                        if (handledFilesComplete)
-                        {
-                            _logger.LogWarning("Missing song {SourcePath} referenced in playlist {PlaylistPath}", playlistSongPath, playlistFile.Path);
-                            allSongsFound = false;
-                            targetFilePath = null;
-                            break;
-                        }
-                        await Task.Delay(1000, cancellationToken);
-                    }
-                    if (targetFilePath == null)
-                        continue;
-
-                    string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
-                    sw.WriteLine($"#EXTINF:0,{_sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)}");
-                    sw.WriteLine(Path.GetRelativePath(playlistDirectoryPath, targetFilePath));
-                }
+                await _playlistWriter.WriteM3u(sw, playlistTargetSongs);
             }
 
             var outFile = new OutputFile

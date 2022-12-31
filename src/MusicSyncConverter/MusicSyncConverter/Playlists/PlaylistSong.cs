@@ -2,9 +2,10 @@
 {
     public class PlaylistSong
     {
-        public PlaylistSong(string path)
+        public PlaylistSong(string path, string? name = null)
         {
             Path = path;
+            Name = name;
         }
         public string Path { get; }
 
