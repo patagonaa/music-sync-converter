@@ -411,7 +411,7 @@ namespace MusicSyncConverter
                     continue;
 
                 string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
-                playlistTargetSongs.Add(new PlaylistSong(Path.GetRelativePath(playlistDirectoryPath, targetFilePath), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)));
+                playlistTargetSongs.Add(new PlaylistSong(PathUtils.MakeUnixPath(Path.GetRelativePath(playlistDirectoryPath, targetFilePath)), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)));
             }
 
             var targetPlaylistFileInfo = syncTarget.GetFileInfo(playlistPath);
