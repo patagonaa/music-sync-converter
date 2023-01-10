@@ -57,7 +57,7 @@ namespace MusicSyncConverter.Conversion
 
             IReadOnlyList<KeyValuePair<string, string>> tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(inputFile, sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceExtension, cancellationToken);
             tags = FilterTags(tags);
-            tags = SanitizeTags(tags, originalFilePath, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
+            tags = SanitizeTags(tags, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
 
             var audioStream = mediaAnalysis.Streams.SingleOrDefault(x => x.CodecType == FfProbeCodecType.Audio);
 
@@ -197,78 +197,68 @@ namespace MusicSyncConverter.Conversion
         {
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
-            switch (sourceExtension.ToLowerInvariant())
+            return sourceExtension.ToLowerInvariant() switch
             {
-                case ".m4a":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "ipod",
-                        AdditionalFlags = "-movflags faststart",
-                        CoverCodec = fallbackFormat.CoverCodec,
-                        MaxCoverSize = fallbackFormat.MaxCoverSize,
-                        Extension = sourceExtension
-                    };
-                case ".aac":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "adts",
-                        CoverCodec = null,
-                        Extension = sourceExtension
-                    };
-                case ".wma":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "asf",
-                        CoverCodec = fallbackFormat.CoverCodec,
-                        MaxCoverSize = fallbackFormat.MaxCoverSize,
-                        Extension = sourceExtension
-                    };
-                case ".ogg":
-                case ".opus":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "ogg",
-                        CoverCodec = fallbackFormat.CoverCodec,
-                        MaxCoverSize = fallbackFormat.MaxCoverSize,
-                        Extension = sourceExtension
-                    };
-                case ".mp3":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "mp3",
-                        CoverCodec = fallbackFormat.CoverCodec,
-                        MaxCoverSize = fallbackFormat.MaxCoverSize,
-                        Extension = sourceExtension
-                    };
-                case ".flac":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "flac",
-                        CoverCodec = fallbackFormat.CoverCodec,
-                        MaxCoverSize = fallbackFormat.MaxCoverSize,
-                        Extension = sourceExtension
-                    };
-                case ".wav":
-                    return new EncoderInfo
-                    {
-                        Codec = "copy",
-                        Muxer = "wav",
-                        CoverCodec = null,
-                        Extension = sourceExtension
-                    };
-
-                default:
-                    throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis.Format.FormatName})");
-            }
+                ".m4a" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "ipod",
+                    AdditionalFlags = "-movflags faststart",
+                    CoverCodec = fallbackFormat.CoverCodec,
+                    MaxCoverSize = fallbackFormat.MaxCoverSize,
+                    Extension = sourceExtension
+                },
+                ".aac" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "adts",
+                    CoverCodec = null,
+                    Extension = sourceExtension
+                },
+                ".wma" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "asf",
+                    CoverCodec = fallbackFormat.CoverCodec,
+                    MaxCoverSize = fallbackFormat.MaxCoverSize,
+                    Extension = sourceExtension
+                },
+                ".ogg" or ".opus" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "ogg",
+                    CoverCodec = fallbackFormat.CoverCodec,
+                    MaxCoverSize = fallbackFormat.MaxCoverSize,
+                    Extension = sourceExtension
+                },
+                ".mp3" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "mp3",
+                    CoverCodec = fallbackFormat.CoverCodec,
+                    MaxCoverSize = fallbackFormat.MaxCoverSize,
+                    Extension = sourceExtension
+                },
+                ".flac" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "flac",
+                    CoverCodec = fallbackFormat.CoverCodec,
+                    MaxCoverSize = fallbackFormat.MaxCoverSize,
+                    Extension = sourceExtension
+                },
+                ".wav" => new EncoderInfo
+                {
+                    Codec = "copy",
+                    Muxer = "wav",
+                    CoverCodec = null,
+                    Extension = sourceExtension
+                },
+                _ => throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis.Format.FormatName})"),
+            };
         }
 
-        private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, string originalPath, CharacterLimitations? characterLimitations, string? tagValueDelimiter)
+        private IReadOnlyList<KeyValuePair<string, string>> SanitizeTags(IReadOnlyList<KeyValuePair<string, string>> tags, CharacterLimitations? characterLimitations, string? tagValueDelimiter)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
             if (tagValueDelimiter != null)
@@ -292,7 +282,7 @@ namespace MusicSyncConverter.Conversion
 
         private string FormatLogValue(string value)
         {
-            if (value.Contains("\n"))
+            if (value.Contains('\n'))
             {
                 return $"{Environment.NewLine}\t{value.ReplaceLineEndings($"{Environment.NewLine}\t")}";
             }
@@ -317,11 +307,11 @@ namespace MusicSyncConverter.Conversion
         private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, FfProbeStream audioStream)
         {
             return (limitation.Extension == null || limitation.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
-                                (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
-                                (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
-                                (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
-                                (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                                (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
+                (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
+                (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
+                (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
+                (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
+                (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
         }
 
         private static async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
@@ -352,7 +342,6 @@ namespace MusicSyncConverter.Conversion
             }
 
             args.AddRange(new[] { "-map_metadata", "-1" });
-
 
             args.AddRange(new[] { "-c:a", encoderInfo.Codec });
 
