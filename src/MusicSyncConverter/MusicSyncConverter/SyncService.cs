@@ -215,7 +215,8 @@ namespace MusicSyncConverter
             {
                 Console.WriteLine(flattened);
             }
-            cancellationTokenSource.Cancel();
+            if (!cancellationTokenSource.IsCancellationRequested)
+                cancellationTokenSource.Cancel();
         }
 
         private IDisposable StartLogContext(SourceFileInfo sourceFile, string? targetFile)
@@ -616,6 +617,10 @@ namespace MusicSyncConverter
                             try
                             {
                                 (outFile, outputExtension) = await _converter.RemuxOrConvert(config, workItem.SourceTempFilePath, workItem.SourceFileInfo.Path, workItem.AlbumArtPath, cancellationToken);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
                             }
                             catch (Exception ex)
                             {

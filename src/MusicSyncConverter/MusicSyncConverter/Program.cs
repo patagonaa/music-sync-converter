@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using System;
 using System.Linq;
@@ -35,7 +34,9 @@ namespace MusicSyncConverter
 
             var cts = new CancellationTokenSource();
 
-            Console.CancelKeyPress += (o, e) => { cts.Cancel(); e.Cancel = true; };
+            // we can't use Console.CancelKeyPress as without Console.TreatControlCAsInput all child processes get the Ctrl+C signal as well, which we don't want.
+            var cancelThread = new Thread(() => CancelThread(cts));
+            cancelThread.Start();
 
             var logger = new MemoryLogger();
             try
@@ -70,6 +71,27 @@ namespace MusicSyncConverter
                     Console.WriteLine();
                 }
             }
+            cts.Cancel();
+        }
+
+        private static void CancelThread(CancellationTokenSource cts)
+        {
+            Console.TreatControlCAsInput = true;
+            while (!cts.IsCancellationRequested)
+            {
+                if (!Console.KeyAvailable)
+                {
+                    Thread.Sleep(100);
+                    continue;
+                }
+                var key = Console.ReadKey(true);
+                if (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Key == ConsoleKey.C)
+                {
+                    Console.WriteLine("Cancelling...");
+                    cts.Cancel();
+                }
+            }
+            Console.TreatControlCAsInput = false;
         }
     }
 }

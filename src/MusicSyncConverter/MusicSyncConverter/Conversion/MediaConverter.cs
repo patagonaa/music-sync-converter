@@ -110,7 +110,7 @@ namespace MusicSyncConverter.Conversion
             };
 
             using var stdout = new StringWriter();
-            await RunProcess("ffprobe", args, stdout, cancellationToken);
+            await RunProcess("ffprobe", args, stdout, process => { }, cancellationToken);
             return JsonSerializer.Deserialize<FfProbeResult>(stdout.ToString()) ?? throw new ArgumentException("ffprobe result was null");
         }
 
@@ -393,15 +393,16 @@ namespace MusicSyncConverter.Conversion
             args.AddRange(new[] { "-f", encoderInfo.Muxer });
             args.Add(outFilePath);
 
-            await RunProcess("ffmpeg", args, null, cancellationToken);
+            await RunProcess("ffmpeg", args, null, process => process.StandardInput.Write('q'), cancellationToken);
             return outFilePath;
         }
 
-        private static async Task RunProcess(string command, IList<string> args, TextWriter? stdout, CancellationToken cancellationToken)
+        private static async Task RunProcess(string command, IList<string> args, TextWriter? stdout, Action<Process> cancelAction, CancellationToken cancellationToken)
         {
             var startInfo = new ProcessStartInfo(command)
             {
                 UseShellExecute = false,
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
@@ -417,11 +418,17 @@ namespace MusicSyncConverter.Conversion
 
             process.ErrorDataReceived += (o, e) => stderr.WriteLine(e.Data);
 
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+            cancellationToken.ThrowIfCancellationRequested();
 
-            await process.WaitForExitAsync(cancellationToken);
+            using (cancellationToken.Register(() => cancelAction(process)))
+            {
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (process.ExitCode != 0)
             {
