@@ -23,12 +23,12 @@ namespace MusicSyncConverter
                 return;
             }
             var thresholdDate = DateTime.UtcNow - TimeSpan.FromDays(1);
-            foreach (var file in Directory.GetFiles(_tempPath, "*", SearchOption.AllDirectories))
+            foreach (var file in Directory.GetDirectories(_tempPath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var fileInfo = new FileInfo(file);
+                var fileInfo = new DirectoryInfo(file);
                 if (fileInfo.LastWriteTimeUtc < thresholdDate)
-                    fileInfo.Delete();
+                    fileInfo.Delete(true);
             }
         }
 
