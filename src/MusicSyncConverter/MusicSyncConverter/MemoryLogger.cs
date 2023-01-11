@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 
 namespace MusicSyncConverter
@@ -36,7 +37,15 @@ namespace MusicSyncConverter
             var sourceFile = states.FirstOrDefault(x => x.Key == "SourceFile").Value?.ToString();
             var targetFile = states.FirstOrDefault(x => x.Key == "TargetFile").Value?.ToString();
 
-            _logMessages.Add((logLevel, PathUtils.NormalizePath(targetFile ?? sourceFile), formatter(state, exception)));
+            var message = new StringBuilder();
+            message.Append(formatter(state, exception));
+            if(exception != null)
+            {
+                message.AppendLine(":");
+                message.AppendLine(exception.ToString());
+            }
+
+            _logMessages.Add((logLevel, PathUtils.NormalizePath(targetFile ?? sourceFile), message.ToString()));
         }
 
         private class ScopeProvider
