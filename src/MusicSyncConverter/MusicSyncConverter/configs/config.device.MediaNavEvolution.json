@@ -1,0 +1,37 @@
+{
+    "DeviceConfig": {
+        "SupportedFormats": [
+            {
+                "Extension": ".mp3",
+                "Codec": "mp3"
+            },
+            {
+                "Extension": ".flac",
+                "Codec": "flac",
+                "MaxChannels": 2
+            }
+        ],
+        "FallbackFormat": {
+            "Extension": ".mp3",
+            "Codec": "libmp3lame",
+            "Muxer": "mp3",
+            "Bitrate": 192,
+            "CoverCodec": "mjpeg",
+            "MaxCoverSize": 512,
+            "Channels": 2
+        },
+        "CharacterLimitations": {
+            "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±´½ÄÅÖ×ÜßäåðöüЁАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяё†…⇧",
+            "Replacements": [
+                {
+                    "Char": "♥",
+                    "Replacement": "<3"
+                }
+            ],
+            "NormalizationMode": "Unsupported"
+        },
+        "ResolvePlaylists": true,
+        "TagValueDelimiter": ";",
+        "MaxDirectoryDepth": 4
+    }
+}
