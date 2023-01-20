@@ -111,12 +111,16 @@
                 {
                     "Char": "…",
                     "Replacement": "..."
+                },
+                {
+                    "Char": "ð",
+                    "Replacement": "d"
                 }
             ],
-            "NormalizeCase": true,
             "NormalizationMode": "Unsupported"
         },
         "ResolvePlaylists": true,
-        "TagValueDelimiter": ";"
+        "TagValueDelimiter": ";",
+        "NormalizeCase": true
     }
 }

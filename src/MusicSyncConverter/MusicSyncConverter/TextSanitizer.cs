@@ -7,49 +7,36 @@ using System.Text;
 
 namespace MusicSyncConverter
 {
-    public class TextSanitizer
+    public class TextSanitizer : ITextSanitizer
     {
-        public string SanitizeText(CharacterLimitations? config, string text, bool isPath, out bool hasUnsupportedChars)
+        public string SanitizePathPart(CharacterLimitations? config, string part, out bool hasUnsupportedChars)
         {
-            if (config == null)
-            {
-                config = new CharacterLimitations();
-            }
+            hasUnsupportedChars = false;
 
-            if (isPath)
+            if (part == ".." || part == ".")
             {
-                hasUnsupportedChars = false;
-                var parts = text.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                var toReturn = new List<string>();
-                foreach (var part in parts)
-                {
-                    if (part == ".." || part == ".")
-                    {
-                        toReturn.Add(part);
-                    }
-                    else
-                    {
-                        toReturn.Add(Sanitize(config, part, true, out var partHasUnsupportedChars));
-                        hasUnsupportedChars |= partHasUnsupportedChars;
-                    }
-                }
-                return string.Join(Path.DirectorySeparatorChar, toReturn);
+                return part;
             }
             else
             {
-                return Sanitize(config, text, false, out hasUnsupportedChars);
+                return Sanitize(config, part, true, out hasUnsupportedChars);
             }
         }
 
-        private static string Sanitize(CharacterLimitations config, string text, bool isForPath, out bool hasUnsupportedChars)
+        public string SanitizeText(CharacterLimitations? config, string text, out bool hasUnsupportedChars)
         {
+            return Sanitize(config, text, false, out hasUnsupportedChars);
+        }
+
+        private static string Sanitize(CharacterLimitations? config, string text, bool isForPath, out bool hasUnsupportedChars)
+        {
+            config ??= new CharacterLimitations();
+
             var toReturn = new StringBuilder();
 
             var pathUnsupportedChars = Path.GetInvalidFileNameChars();
 
             hasUnsupportedChars = false;
-
-            var first = true;
 
             var supportedRunes = config.SupportedChars?.EnumerateRunes().ToList();
 
@@ -72,12 +59,6 @@ namespace MusicSyncConverter
                 else
                 {
                     toInsert = inChar.ToString();
-                }
-
-                if (config.NormalizeCase && first)
-                {
-                    toInsert = new string(toInsert.EnumerateRunes().SelectMany((x, i) => i == 0 ? Rune.ToUpperInvariant(x).ToString() : x.ToString()).ToArray());
-                    first = false;
                 }
 
                 foreach (var outChar in toInsert.EnumerateRunes())

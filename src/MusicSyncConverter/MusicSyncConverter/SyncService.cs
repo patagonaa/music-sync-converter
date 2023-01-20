@@ -25,6 +25,7 @@ namespace MusicSyncConverter
         private readonly FileProviderFactory _fileProviderFactory;
         private readonly SyncTargetFactory _syncTargetFactory;
         private readonly TextSanitizer _sanitizer;
+        private readonly PathTransformer _pathTransformer;
         private readonly MediaConverter _converter;
         private readonly PathMatcher _pathMatcher;
         private readonly PlaylistParser _playlistParser;
@@ -38,6 +39,7 @@ namespace MusicSyncConverter
             _fileProviderFactory = new FileProviderFactory();
             _syncTargetFactory = new SyncTargetFactory();
             _sanitizer = new TextSanitizer();
+            _pathTransformer = new PathTransformer(_sanitizer);
             _converter = new MediaConverter(tempFileSession, logger);
             _pathMatcher = new PathMatcher();
             _playlistParser = new PlaylistParser();
@@ -376,7 +378,7 @@ namespace MusicSyncConverter
         {
             var playlistFile = playlist.PlaylistFileInfo;
 
-            var playlistPath = _sanitizer.SanitizeText(syncConfig.DeviceConfig.PathCharacterLimitations, playlistFile.Path, true, out _);
+            var playlistPath = _pathTransformer.TransformPath(playlistFile.Path, PathTransformType.FilePath, syncConfig.DeviceConfig, out _);
 
             var playlistTargetSongs = new List<PlaylistSong>();
             var allSongsFound = true;
@@ -412,7 +414,7 @@ namespace MusicSyncConverter
                     continue;
 
                 string songName = song.Name ?? Path.GetFileNameWithoutExtension(song.Path);
-                playlistTargetSongs.Add(new PlaylistSong(PathUtils.MakeUnixPath(Path.GetRelativePath(playlistDirectoryPath, targetFilePath)), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, false, out _)));
+                playlistTargetSongs.Add(new PlaylistSong(PathUtils.MakeUnixPath(Path.GetRelativePath(playlistDirectoryPath, targetFilePath)), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, out _)));
             }
 
             var targetPlaylistFileInfo = syncTarget.GetFileInfo(playlistPath);
@@ -472,7 +474,7 @@ namespace MusicSyncConverter
                 }
             }
 
-            var targetDirPath = _sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, proposedDirPath, true, out _);
+            var targetDirPath = _pathTransformer.TransformPath(proposedDirPath, PathTransformType.DirPath, config.DeviceConfig, out _);
 
             var directoryContents = syncTarget.GetDirectoryContents(targetDirPath);
             var files = directoryContents.ToList();
@@ -482,7 +484,7 @@ namespace MusicSyncConverter
                 SongReadWorkItem? result = null;
                 using (StartLogContext(syncInfo.SourceFileInfo, syncInfo.TargetPath))
                 {
-                    var targetPath = _sanitizer.SanitizeText(config.DeviceConfig.PathCharacterLimitations, syncInfo.TargetPath, true, out var hasUnsupportedChars);
+                    var targetPath = _pathTransformer.TransformPath(syncInfo.TargetPath, PathTransformType.FilePath, config.DeviceConfig, out var hasUnsupportedChars);
 
                     var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
 

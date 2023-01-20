@@ -20,6 +20,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Update="configs\config.device.MediaNavEvolution.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
         <None Update="configs\config.device.Android.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>

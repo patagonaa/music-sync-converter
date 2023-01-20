@@ -15,10 +15,11 @@ Works on Windows and Linux, macOS is untested.
 - automatically embed album art from the directory into the file
 - handle unsupported characters in path and tags
     - replace unsupported characters with a replacement list
-    - replace unsupported characters using Unicode compatibility normalization 
+    - replace unsupported characters using Unicode compatibility normalization
 - handle m3u playlists by adjusting the file path or resolving the playlist to a directory with the playlist's songs
 - order the FAT32 file table (for embedded devices that don't sort directories before playing)
 - normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
+- handle limited directory depth (when set to 4: "One/Two/Three/Four/Five/Test.mp3" -> "One/Two/Three/Four_Five/Test.mp3")
 
 ## Installation
 ### Dependencies:
@@ -190,8 +191,7 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
                     "Replacement": "..."
                 }
             ],
-            "NormalizationMode": "NonBmp", // can be "None", "NonBmp", "Unsupported", "All"
-            "NormalizeCase": true // change every first character of file/dir names to uppercase
+            "NormalizationMode": "NonBmp" // can be "None", "NonBmp", "Unsupported", "All"
         },
         "TagCharacterLimitations": null
         "ResolvePlaylists": true // convert playlists to directories with the respective files
@@ -202,6 +202,8 @@ results in the directory `Playlists/Test/` with the file `An Artist - Song 4.fla
             "MaxChannels": 1
         }
     },
+    "NormalizeCase": true, // change every first character of file/dir names to uppercase
+    "MaxDirectoryDepth": null, // (don't) limit maximum directory depth
     "WorkersRead": 8, // max number of threads to use for reading files
     "WorkersConvert": 8, // max number of threads to use for converting files
     "WorkersWrite": 1 // max number of threads to use for writing (for slow devices like HDDs, SD cards or flash drives, 1 is usually best)

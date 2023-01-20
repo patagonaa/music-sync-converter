@@ -23,5 +23,7 @@ namespace MusicSyncConverter.Config
         public CharacterLimitations? TagCharacterLimitations { get; set; }
         public bool ResolvePlaylists { get; set; } = false;
         public string? TagValueDelimiter { get; set; }
+        public bool NormalizeCase { get; set; }
+        public int? MaxDirectoryDepth { get; set; }
     }
 }

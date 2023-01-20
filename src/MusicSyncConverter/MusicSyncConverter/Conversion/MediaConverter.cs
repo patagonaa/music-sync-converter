@@ -15,7 +15,7 @@ namespace MusicSyncConverter.Conversion
 {
     class MediaConverter
     {
-        private readonly TextSanitizer _sanitizer;
+        private readonly ITextSanitizer _sanitizer;
         private readonly PathMatcher _pathMatcher;
         private readonly List<ITagReader> _tagReaders;
         private readonly List<ITagWriter> _tagWriters;
@@ -271,7 +271,7 @@ namespace MusicSyncConverter.Conversion
 
             foreach (var tag in tags)
             {
-                var tagValue = _sanitizer.SanitizeText(characterLimitations, tag.Value, false, out var hasUnsupportedChars);
+                var tagValue = _sanitizer.SanitizeText(characterLimitations, tag.Value, out var hasUnsupportedChars);
                 if (hasUnsupportedChars)
                     _logger.LogInformation("Unsupported chars in tag {Tag}: {TagValue}", tag.Key, FormatLogValue(tag.Value));
                 toReturn.Add(new KeyValuePair<string, string>(tag.Key, tagValue));
