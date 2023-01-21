@@ -21,8 +21,7 @@ namespace MusicSyncConverter
         {
             pathIsUnsupported = false;
             var toReturn = new List<string>();
-            var pathParts = GetPathParts(path, type, config.MaxDirectoryDepth, out var partsReplaced);
-            pathIsUnsupported |= partsReplaced;
+            var pathParts = GetPathParts(path, type, config.MaxDirectoryDepth, out _);
             foreach (var pathPart in pathParts)
             {
                 var sb = new StringBuilder();
