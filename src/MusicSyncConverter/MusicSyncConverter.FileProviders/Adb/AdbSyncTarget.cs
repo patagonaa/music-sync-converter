@@ -151,6 +151,12 @@ namespace MusicSyncConverter.FileProviders.Adb
             return true;
         }
 
+        public bool IsHidden(string path, bool recurse)
+        {
+            var pathParts = PathUtils.GetPathStack(path);
+            return recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.');
+        }
+
         public IChangeToken Watch(string filter)
         {
             throw new NotImplementedException();

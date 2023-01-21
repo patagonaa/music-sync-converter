@@ -271,6 +271,12 @@ namespace MusicSyncConverter.FileProviders.Wpd
             throw new NotImplementedException();
         }
 
+        public bool IsHidden(string path, bool recurse)
+        {
+            var pathParts = PathUtils.GetPathStack(path);
+            return recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.');
+        }
+
         public Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken)
         {
             var wpdFiles = files.OfType<WpdFileInfo>().ToList();

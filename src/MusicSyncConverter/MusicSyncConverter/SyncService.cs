@@ -700,7 +700,7 @@ namespace MusicSyncConverter
 
                 var normalizedPath = new NormalizedPath(path);
 
-                if (PathUtils.GetPathStack(path).Any(x => x.StartsWith('.')))
+                if (syncTarget.IsHidden(path, true))
                 {
                     // hidden file/dir
                     continue;
@@ -739,7 +739,7 @@ namespace MusicSyncConverter
             foreach (var item in syncTarget.GetDirectoryContents(path))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!item.IsDirectory)
+                if (!item.IsDirectory || syncTarget.IsHidden(path, false))
                     continue;
 
                 string subDir = Path.Join(path, item.Name);

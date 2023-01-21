@@ -118,5 +118,48 @@ namespace MusicSyncConverter.FileProviders.Physical
             }
             return Task.CompletedTask;
         }
+
+        public bool IsHidden(string path, bool recurse)
+        {
+            if (recurse)
+            {
+                var physicalPath = Root;
+                foreach (var pathPart in PathUtils.GetPathStack(path).Reverse())
+                {
+                    if (pathPart.StartsWith('.'))
+                        return true;
+
+                    // if we're on Windows (or macOS?), also check Hidden attribute
+                    if (Environment.OSVersion.Platform != PlatformID.Unix)
+                    {
+                        physicalPath = Path.Combine(physicalPath, pathPart);
+
+                        var attributes = File.GetAttributes(physicalPath);
+                        if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
+                            return true;
+                    }
+                }
+                return false;
+            }
+            else
+            {
+                var pathStack = PathUtils.GetPathStack(path);
+                if (pathStack.First().StartsWith('.'))
+                {
+                    return true;
+                }
+
+                var physicalPath = Path.Combine(new[] { Root }.Concat(pathStack.Reverse()).ToArray());
+                // if we're on Windows (or macOS?), also check Hidden attribute
+                if (Environment.OSVersion.Platform != PlatformID.Unix)
+                {
+                    var attributes = File.GetAttributes(physicalPath);
+                    if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
+                        return true;
+                }
+
+                return false;
+            }
+        }
     }
 }
