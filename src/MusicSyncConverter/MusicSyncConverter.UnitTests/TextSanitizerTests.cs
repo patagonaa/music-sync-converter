@@ -5,10 +5,9 @@ namespace MusicSyncConverter.UnitTests
 {
     public class TextSanitizerTests
     {
-        private ITextSanitizer _sut;
+        private readonly ITextSanitizer _sut;
 
-        [SetUp]
-        public void Setup()
+        public TextSanitizerTests()
         {
             _sut = new TextSanitizer();
         }
