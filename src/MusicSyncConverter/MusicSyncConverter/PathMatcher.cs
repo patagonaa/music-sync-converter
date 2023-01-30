@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MusicSyncConverter.FileProviders;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -30,7 +31,7 @@ namespace MusicSyncConverter
         public bool Matches(string glob, string path, bool caseSensitive)
         {
             var regex = _globCache.GetOrAdd((glob, caseSensitive), key => GetRegexForGlob(key.Glob, key.CaseSensitive));
-            return regex.IsMatch(path);
+            return regex.IsMatch(PathUtils.NormalizePath(path));
         }
 
         private Regex GetRegexForGlob(string glob, bool caseSensitive)
