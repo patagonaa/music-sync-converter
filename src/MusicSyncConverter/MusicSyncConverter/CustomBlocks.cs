@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks.Dataflow;
 
 namespace MusicSyncConverter
 {
     internal static class CustomBlocks
     {
-        internal static IPropagatorBlock<TItem, TItem[]> GetGroupByBlock<TItem, TKey>(Func<TItem, TKey> selector, IEqualityComparer<TKey> comparer)
+        internal static IPropagatorBlock<TItem, TItem[]> GetGroupByBlock<TItem, TKey>(Func<TItem, TKey> selector, IEqualityComparer<TKey> comparer, CancellationToken cancellationToken = default)
         {
-            var source = new BufferBlock<TItem[]>(new DataflowBlockOptions { BoundedCapacity = 8 });
+            var source = new BufferBlock<TItem[]>(new DataflowBlockOptions { BoundedCapacity = 8, CancellationToken = cancellationToken });
 
             var items = new List<TItem>(64);
             TKey? currentKey = default;
@@ -31,7 +32,7 @@ namespace MusicSyncConverter
                     currentKey = selector(x);
                     items.Add(x);
                 }
-            }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1, BoundedCapacity = 8 });
+            }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1, BoundedCapacity = 8, CancellationToken = cancellationToken });
 
             target.Completion.ContinueWith(async x =>
             {

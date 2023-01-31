@@ -108,7 +108,7 @@ namespace MusicSyncConverter
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // group files by their directory before comparing so we don't have to do a directory listing for every file
-                    var groupSongsByDirectoryBlock = CustomBlocks.GetGroupByBlock<SongSyncInfo, NormalizedPath>(x => new NormalizedPath(Path.GetDirectoryName(x.TargetPath)!), targetPathComparer);
+                    var groupSongsByDirectoryBlock = CustomBlocks.GetGroupByBlock<SongSyncInfo, NormalizedPath>(x => new NormalizedPath(Path.GetDirectoryName(x.TargetPath)!), targetPathComparer, cancellationToken);
                     groupSongsByDirectoryBlock.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
                     var getSyncInfoBlock = new TransformManyBlock<SourceFileInfo, SongSyncInfo>(x => FilterNull(GetSyncInfo(x, config)), workerOptions);
