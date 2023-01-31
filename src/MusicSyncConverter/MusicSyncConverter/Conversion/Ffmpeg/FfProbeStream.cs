@@ -23,7 +23,7 @@ namespace MusicSyncConverter.Conversion.Ffmpeg
 
         [JsonPropertyName("bit_rate")]
         [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-        public int BitRate { get; set; }
+        public int? BitRate { get; set; }
 
         [JsonPropertyName("tags")]
         public IDictionary<string, string>? Tags { get; set; }

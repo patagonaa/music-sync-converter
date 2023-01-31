@@ -59,11 +59,9 @@ namespace MusicSyncConverter.Conversion
             tags = FilterTags(tags);
             tags = SanitizeTags(tags, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
 
-            var audioStream = mediaAnalysis.Streams.SingleOrDefault(x => x.CodecType == FfProbeCodecType.Audio);
-
-            if (audioStream == null)
+            if (mediaAnalysis.Streams.Count(x => x.CodecType == FfProbeCodecType.Audio) != 1)
             {
-                throw new Exception("Missing Audio stream");
+                throw new Exception("Files must have exactly one audio stream");
             }
 
             EncoderInfo encoderInfo;
@@ -72,7 +70,7 @@ namespace MusicSyncConverter.Conversion
 
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
-            if ((mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, audioStream)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, audioStream))
+            if ((mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis))
             {
                 encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
             }
@@ -292,11 +290,11 @@ namespace MusicSyncConverter.Conversion
             }
         }
 
-        private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, FfProbeStream audioStream)
+        private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, FfProbeResult mediaAnalysis)
         {
             foreach (var supportedFormat in supportedFormats)
             {
-                if (IsWithinLimitations(supportedFormat, sourceExtension, audioStream))
+                if (IsWithinLimitations(supportedFormat, sourceExtension, mediaAnalysis))
                 {
                     return true;
                 }
@@ -304,14 +302,16 @@ namespace MusicSyncConverter.Conversion
             return false;
         }
 
-        private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, FfProbeStream audioStream)
+        private static bool IsWithinLimitations(FileFormatLimitation limitation, string sourceExtension, FfProbeResult mediaAnalysis)
         {
+            var audioStream = mediaAnalysis.Streams.Single(x => x.CodecType == FfProbeCodecType.Audio);
+
             return (limitation.Extension == null || limitation.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
                 (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
                 (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
                 (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
                 (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                (limitation.MaxBitrate == null || limitation.MaxBitrate >= audioStream.BitRate / 1000);
+                (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate ?? mediaAnalysis.Format.BitRate) / 1000);
         }
 
         private static async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
