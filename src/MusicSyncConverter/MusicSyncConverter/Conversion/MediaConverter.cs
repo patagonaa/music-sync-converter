@@ -331,13 +331,21 @@ namespace MusicSyncConverter.Conversion
 
             if (coverSupported)
             {
+                var hasCover = false;
                 if (hasEmbeddedCover)
                 {
-                    args.AddRange(new[] { "-map", "0:v", "-disposition:v", "attached_pic" });
+                    args.AddRange(new[] { "-map", "0:v" });
+                    hasCover = true;
                 }
                 else if (hasExternalCover)
                 {
-                    args.AddRange(new[] { "-map", "1:v", "-disposition:v", "attached_pic" });
+                    args.AddRange(new[] { "-map", "1:v" });
+                    hasCover = true;
+                }
+
+                if (hasCover)
+                {
+                    args.AddRange(new[] { "-disposition:v", "attached_pic", "-metadata:s:v", "comment=Cover (front)" });
                 }
             }
 
@@ -363,6 +371,12 @@ namespace MusicSyncConverter.Conversion
             if (encoderInfo.Bitrate.HasValue)
             {
                 args.AddRange(new[] { "-b:a", (encoderInfo.Bitrate.Value * 1000).ToString() });
+            }
+
+            if(encoderInfo.Muxer == "mp3")
+            {
+                args.AddRange(new[] { "-id3v2_version", "3" });
+
             }
 
             if (tags != null)
