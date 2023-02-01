@@ -64,23 +64,30 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Files must have exactly one audio stream");
             }
 
-            EncoderInfo encoderInfo;
+            var hasEmbeddedCover = mediaAnalysis.Streams.Any(x => x.CodecType == FfProbeCodecType.Video);
+            var hasAlbumArt = hasEmbeddedCover || albumArtPath != null;
+
+            var encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
 
             var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
-
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
-            if ((mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)) && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis))
+            if (!IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis) || (mergedOverrides != null && !IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)) || !AlbumArtIsSupported(encoderInfo, hasAlbumArt))
             {
-                encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
+                if (mergedOverrides != null)
+                {
+                    encoderInfo = GetEncoderInfoOverride(config.DeviceConfig.FallbackFormat, mergedOverrides);
+                }
+                else
+                {
+                    encoderInfo = config.DeviceConfig.FallbackFormat;
+                }
             }
-            else if (mergedOverrides != null)
+
+            if (!AlbumArtIsSupported(encoderInfo, hasAlbumArt))
             {
-                encoderInfo = GetEncoderInfoOverride(config.DeviceConfig.FallbackFormat, mergedOverrides);
-            }
-            else
-            {
-                encoderInfo = config.DeviceConfig.FallbackFormat;
+                _logger.LogWarning("FFMPEG does not support writing album art to ogg/opus files. Ignoring album art.");
+                encoderInfo.CoverCodec = null;
             }
 
             var outputFile = _tempFileSession.GetTempFilePath();
@@ -88,12 +95,28 @@ namespace MusicSyncConverter.Conversion
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
 
             var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
-            await Convert(inputFile, mediaAnalysis.Streams.Any(x => x.CodecType == FfProbeCodecType.Video), albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
+            await Convert(inputFile, hasEmbeddedCover, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
 
             if (tagWriter != null)
                 await tagWriter.SetTags(tags, outputFile, cancellationToken);
 
             return (outputFile, encoderInfo.Extension);
+        }
+
+        private bool AlbumArtIsSupported(EncoderInfo encoderInfo, bool hasAlbumArt)
+        {
+            var albumArtEnabled = encoderInfo.CoverCodec != null;
+
+            if (!albumArtEnabled || !hasAlbumArt)
+                return true;
+
+            if (encoderInfo.Muxer == "ogg")
+            {
+                // HACK: FFMPEG does not support adding album art to ogg/opus files.
+                // https://trac.ffmpeg.org/ticket/4448
+                return false;
+            }
+            return true;
         }
 
         private static async Task<FfProbeResult> AnalyseAsync(string inputFile, CancellationToken cancellationToken)
@@ -373,7 +396,7 @@ namespace MusicSyncConverter.Conversion
                 args.AddRange(new[] { "-b:a", (encoderInfo.Bitrate.Value * 1000).ToString() });
             }
 
-            if(encoderInfo.Muxer == "mp3")
+            if (encoderInfo.Muxer == "mp3")
             {
                 args.AddRange(new[] { "-id3v2_version", "3" });
 
@@ -446,7 +469,7 @@ namespace MusicSyncConverter.Conversion
 
             if (process.ExitCode != 0)
             {
-                throw new Exception($"Exit Code {process.ExitCode} while running {command}." + Environment.NewLine + stderr.ToString());
+                throw new Exception($"Exit Code {process.ExitCode} while running {command} \"{string.Join("\" \"", args)}\"." + Environment.NewLine + Environment.NewLine + stderr.ToString());
             }
         }
     }
