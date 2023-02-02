@@ -64,6 +64,8 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Files must have exactly one audio stream");
             }
 
+            var audioStream = mediaAnalysis.Streams.Single(x => x.CodecType == FfProbeCodecType.Audio);
+
             var hasEmbeddedCover = mediaAnalysis.Streams.Any(x => x.CodecType == FfProbeCodecType.Video);
             var hasAlbumArt = hasEmbeddedCover || albumArtPath != null;
 
@@ -88,6 +90,11 @@ namespace MusicSyncConverter.Conversion
             {
                 _logger.LogWarning("FFMPEG does not support writing album art to ogg/opus files. Ignoring album art.");
                 encoderInfo.CoverCodec = null;
+            }
+
+            if(encoderInfo.Codec == "libvorbis" && audioStream.SampleRateHz > 48000)
+            {
+                encoderInfo.SampleRateHz = 48000;
             }
 
             var outputFile = _tempFileSession.GetTempFilePath();
