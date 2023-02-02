@@ -45,8 +45,8 @@
             }
         ],
         "FallbackFormat": {
-            "Extension": ".m4a", // this weird combination of m4a and opus is here, because FFMPEG can't add album covers to ogg containers and tags are broken with matroska for some reason
-            "Codec": "libopus",
+            "Extension": ".m4a", // this weird combination of m4a and vorbis is here, because FFMPEG can't add album covers to ogg containers and tags are broken with matroska for some reason
+            "Codec": "libvorbis", // we could use opus here, but for some reason that makes album covers break
             "Muxer": "mp4",
             "Bitrate": 128,
             "CoverCodec": "mjpeg",
