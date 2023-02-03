@@ -1,7 +1,4 @@
-﻿using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Primitives;
-using MusicSyncConverter.FileProviders.Abstractions;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -15,7 +12,7 @@ using Vanara.PInvoke;
 using static Vanara.PInvoke.Ole32;
 using static Vanara.PInvoke.PortableDeviceApi;
 
-namespace MusicSyncConverter.FileProviders.Wpd
+namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
 {
     // https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices
     // https://github.com/teapottiger/WPDApi/blob/62be7c4acc6104aef108769b4496b35b0a7fbd53/PortableDevices/PortableDevice.cs
@@ -29,7 +26,7 @@ namespace MusicSyncConverter.FileProviders.Wpd
         private readonly IPortableDeviceProperties _contentProperties;
         private readonly string _basePath;
         private readonly PathComparer _pathComparer;
-        private readonly Dictionary<NormalizedPath, IDirectoryContents> _directoryContentsCache;
+        private readonly Dictionary<NormalizedPath, IList<SyncTargetFileInfo>?> _directoryContentsCache;
         private readonly Dictionary<NormalizedPath, string> _objectIdCache;
 
         public WpdSyncTarget(string friendlyName, string basePath)
@@ -38,8 +35,8 @@ namespace MusicSyncConverter.FileProviders.Wpd
             _content = _device.Content();
             _contentProperties = _content.Properties();
             _basePath = basePath;
-            _pathComparer = new PathComparer(IsCaseSensitive());
-            _directoryContentsCache = new Dictionary<NormalizedPath, IDirectoryContents>(_pathComparer);
+            _pathComparer = new PathComparer(IsCaseSensitive().Result);
+            _directoryContentsCache = new Dictionary<NormalizedPath, IList<SyncTargetFileInfo>?>(_pathComparer);
             _objectIdCache = new Dictionary<NormalizedPath, string>(_pathComparer);
         }
 
@@ -73,9 +70,9 @@ namespace MusicSyncConverter.FileProviders.Wpd
             return clientInfo;
         }
 
-        public bool IsCaseSensitive()
+        public Task<bool> IsCaseSensitive()
         {
-            return false; // TODO do we even care?
+            return Task.FromResult(false); // TODO do we even care?
         }
 
         public Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
@@ -174,38 +171,84 @@ namespace MusicSyncConverter.FileProviders.Wpd
             return _content.CreateObjectWithPropertiesOnly(properties);
         }
 
-        public IFileInfo? GetFileInfo(string subPath)
+        public Task<SyncTargetFileInfo?> GetFileInfo(string subPath, CancellationToken cancellationToken)
         {
             lock (_syncLock)
             {
                 var obj = GetObjectId(subPath);
                 if (obj == null)
-                    return new NotFoundFileInfo(subPath);
+                    return Task.FromResult<SyncTargetFileInfo?>(null);
 
-                var fileInfo = new WpdFileInfo(obj, _contentProperties);
-
-                // this part is really stupid but at least PhysicalFileProvider returns NotFound in this case,
-                // so we do the same here so callers don't rely on GetFileInfo working for directories.
-                if (fileInfo.IsDirectory)
-                    return new NotFoundFileInfo(subPath);
-
-                return fileInfo;
+                return Task.FromResult<SyncTargetFileInfo?>(GetFileInfoInternal(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(subPath)) ?? throw new ArgumentException("Invalid Path"), obj));
             }
         }
 
-        public IDirectoryContents GetDirectoryContents(string subPath)
+        public Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subPath, CancellationToken cancellationToken)
         {
             var normalizedSubPath = new NormalizedPath(subPath);
             lock (_syncLock)
             {
-                if (!_directoryContentsCache.TryGetValue(normalizedSubPath, out IDirectoryContents? directoryContents))
+                if (!_directoryContentsCache.TryGetValue(normalizedSubPath, out IList<SyncTargetFileInfo>? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
-                    directoryContents = obj == null ? NotFoundDirectoryContents.Singleton : new WpdDirectoryContents(obj, _content, _contentProperties);
+                    if(obj == null)
+                    {
+                        directoryContents = null;
+                    }
+                    else
+                    {
+                        directoryContents = new List<SyncTargetFileInfo>();
+                        var children = _content.EnumObjects(0, obj);
+                        foreach (var childId in children.Enumerate())
+                        {
+                            directoryContents.Add(GetFileInfoInternal(subPath, childId));
+                        }
+                    }
                     _directoryContentsCache.TryAdd(normalizedSubPath, directoryContents);
                 }
-                return directoryContents;
+                return Task.FromResult(directoryContents);
             }
+        }
+
+        private SyncTargetFileInfo GetFileInfoInternal(string directoryPath, string? obj)
+        {
+            var propertiesToFetch = new IPortableDeviceKeyCollection();
+            propertiesToFetch.Add(WPD_OBJECT_NAME);
+            propertiesToFetch.Add(WPD_OBJECT_SIZE);
+            propertiesToFetch.Add(WPD_OBJECT_DATE_MODIFIED);
+            propertiesToFetch.Add(WPD_OBJECT_CONTENT_TYPE);
+
+            var values = _contentProperties.GetValues(obj, propertiesToFetch);
+
+            string? name = null;
+            var lastModified = DateTimeOffset.MinValue;
+            var isDirectory = false;
+            foreach (var (key, value) in values.Enumerate())
+            {
+                if (key == WPD_OBJECT_NAME)
+                {
+                    name = value.bstrVal;
+                }
+
+                if (key == WPD_OBJECT_DATE_MODIFIED)
+                {
+                    lastModified = value.date;
+                }
+
+                if (key == WPD_OBJECT_CONTENT_TYPE)
+                {
+                    if (value.puuid == WPD_CONTENT_TYPE_FOLDER)
+                    {
+                        isDirectory = true;
+                    }
+                }
+            }
+            if (name == null)
+            {
+                throw new InvalidOperationException($"object with ID {obj} has no name");
+            }
+
+            return new SyncTargetFileInfo(Path.Join(directoryPath, name), name, isDirectory, lastModified);
         }
 
         private string? GetObjectId(string objPath)
@@ -266,44 +309,28 @@ namespace MusicSyncConverter.FileProviders.Wpd
             }
         }
 
-        public IChangeToken Watch(string filter)
-        {
-            throw new NotImplementedException();
-        }
-
-        public bool IsHidden(string path, bool recurse)
+        public Task<bool> IsHidden(string path, bool recurse)
         {
             var pathParts = PathUtils.GetPathStack(path);
-            return recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.');
+            return Task.FromResult(recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.'));
         }
 
-        public Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken)
+        public Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken)
         {
-            var wpdFiles = files.OfType<WpdFileInfo>().ToList();
-            if (wpdFiles.Count != files.Count)
-            {
-                throw new ArgumentException("all files must be WpdFileInfo", nameof(files));
-            }
-
             lock (_syncLock)
             {
                 var sw = Stopwatch.StartNew();
                 var objsToDelete = new IPortableDevicePropVariantCollection();
-                foreach (var wpdFile in wpdFiles)
+                foreach (var wpdFile in files)
                 {
-                    objsToDelete.Add(new PROPVARIANT(wpdFile.ObjectId));
+                    objsToDelete.Add(new PROPVARIANT(GetObjectId(wpdFile.Path)));
                 }
                 _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
                 ClearCaches();
                 sw.Stop();
-                Debug.WriteLine("Delete {0} in {1}ms", wpdFiles.Count, sw.ElapsedMilliseconds);
+                Debug.WriteLine("Delete {0} in {1}ms", files.Count, sw.ElapsedMilliseconds);
             }
             return Task.CompletedTask;
-        }
-
-        public Task Delete(IFileInfo file, CancellationToken cancellationToken)
-        {
-            return Delete(new[] { file }, cancellationToken);
         }
 
         private void ClearCaches()

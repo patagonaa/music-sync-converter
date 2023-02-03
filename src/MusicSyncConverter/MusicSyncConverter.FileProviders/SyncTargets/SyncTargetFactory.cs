@@ -1,14 +1,13 @@
-﻿using MusicSyncConverter.FileProviders.Abstractions;
-using MusicSyncConverter.FileProviders.Adb;
-using MusicSyncConverter.FileProviders.Physical;
-using MusicSyncConverter.FileProviders.Wpd;
+﻿using MusicSyncConverter.FileProviders.SyncTargets.Adb;
+using MusicSyncConverter.FileProviders.SyncTargets.Physical;
+using MusicSyncConverter.FileProviders.SyncTargets.Wpd;
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
-namespace MusicSyncConverter.FileProviders
+namespace MusicSyncConverter.FileProviders.SyncTargets
 {
     public class SyncTargetFactory
     {
@@ -25,7 +24,7 @@ namespace MusicSyncConverter.FileProviders
                 case "file":
                     {
                         var pathQuerySplit = uriString.Replace("file://", "").Split('?');
-                        var sortMode = (pathQuerySplit.Length == 2) && Enum.TryParse<FatSortMode>(HttpUtility.ParseQueryString(pathQuerySplit[1])["fatSortMode"], out var sortModeTmp)
+                        var sortMode = pathQuerySplit.Length == 2 && Enum.TryParse<FatSortMode>(HttpUtility.ParseQueryString(pathQuerySplit[1])["fatSortMode"], out var sortModeTmp)
                             ? sortModeTmp
                             : FatSortMode.None;
                         var path = pathQuerySplit[0];

@@ -5,10 +5,9 @@ namespace MusicSyncConverter.UnitTests
     [TestFixture]
     public class PathMatcherTests
     {
-        private PathMatcher _sut;
+        private readonly PathMatcher _sut;
 
-        [SetUp]
-        public void Setup()
+        public PathMatcherTests()
         {
             _sut = new PathMatcher();
         }

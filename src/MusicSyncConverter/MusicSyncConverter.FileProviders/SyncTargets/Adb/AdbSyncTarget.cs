@@ -1,7 +1,5 @@
 ﻿using AdbClient;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Primitives;
-using MusicSyncConverter.FileProviders.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,7 +10,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MusicSyncConverter.FileProviders.Adb
+namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
 {
     internal class AdbSyncTarget : ISyncTarget, IDisposable
     {
@@ -83,24 +81,13 @@ namespace MusicSyncConverter.FileProviders.Adb
             return Task.CompletedTask;
         }
 
-        public async Task Delete(IFileInfo file, CancellationToken cancellationToken)
+        public async Task Delete(IReadOnlyCollection<SyncTargetFileInfo> adbItems, CancellationToken cancellationToken)
         {
-            await Delete(new[] { file }, cancellationToken);
-        }
-
-        public async Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken)
-        {
-            var adbItems = files.OfType<AdbFileInfo>().ToList();
-            if (adbItems.Count != files.Count)
-            {
-                throw new ArgumentException("all files must be AdbFileInfo", nameof(files));
-            }
-
             foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => x.FullPath), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => GetUnixPath(x.Path!)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -112,7 +99,7 @@ namespace MusicSyncConverter.FileProviders.Adb
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => x.FullPath), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => GetUnixPath(x.Path!)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -126,35 +113,42 @@ namespace MusicSyncConverter.FileProviders.Adb
             _syncService.Dispose();
         }
 
-        public IDirectoryContents GetDirectoryContents(string subpath)
+        public async Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default)
         {
-            var path = PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
+            var path = GetUnixPath(subpath);
 
-            var stat = _syncService.Stat(path).Result;
+            var stat = await _syncService.Stat(path, cancellationToken);
             if (stat.Mode == 0)
-                return NotFoundDirectoryContents.Singleton;
+                return null;
 
-            var dirList = _syncService.List(path).Result;
-            return new AdbDirectoryContents(path, dirList, _syncService);
+            var dirList = await _syncService.List(path, cancellationToken);
+            return dirList.Select(x => MapToFileInfo(x, Path.Join(path, x.Path))).ToList();
         }
 
-        public IFileInfo GetFileInfo(string subpath)
+        public async Task<SyncTargetFileInfo?> GetFileInfo(string subpath, CancellationToken cancellationToken = default)
         {
-            var path = PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
+            var path = GetUnixPath(subpath);
 
-            var stat = _syncService.Stat(path).Result;
-            return new AdbFileInfo(path, stat, _syncService);
+            var stat = await _syncService.Stat(path, cancellationToken);
+            if (stat.Mode == 0)
+                return null;
+            return MapToFileInfo(stat, subpath);
         }
 
-        public bool IsCaseSensitive()
+        private SyncTargetFileInfo MapToFileInfo(StatEntry stat, string fullPath)
         {
-            return true;
+            return new SyncTargetFileInfo(fullPath, stat.Path, stat.Mode.HasFlag(UnixFileMode.Directory), stat.ModifiedTime);
         }
 
-        public bool IsHidden(string path, bool recurse)
+        public Task<bool> IsCaseSensitive()
+        {
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> IsHidden(string path, bool recurse)
         {
             var pathParts = PathUtils.GetPathStack(path);
-            return recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.');
+            return Task.FromResult(recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.'));
         }
 
         public IChangeToken Watch(string filter)
@@ -164,7 +158,7 @@ namespace MusicSyncConverter.FileProviders.Adb
 
         public async Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
-            var path = PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
+            var path = GetUnixPath(subpath);
             await _syncService.Push(path, (UnixFileMode)Convert.ToInt32("660", 8), modified ?? DateTimeOffset.Now, content, cancellationToken);
             var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
             var command = "am";
@@ -177,6 +171,11 @@ namespace MusicSyncConverter.FileProviders.Adb
                     throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
                 }
             }
+        }
+
+        private string GetUnixPath(string subpath)
+        {
+            return PathUtils.MakeUnixPath(Path.Join(_basePath, subpath));
         }
     }
 }

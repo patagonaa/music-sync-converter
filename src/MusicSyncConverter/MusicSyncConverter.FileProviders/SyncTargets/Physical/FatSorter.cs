@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-namespace MusicSyncConverter.FileProviders.Physical
+namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
 {
     public class FatSorter
     {

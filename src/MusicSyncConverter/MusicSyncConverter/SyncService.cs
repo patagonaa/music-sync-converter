@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using MusicSyncConverter.Conversion;
 using MusicSyncConverter.FileProviders;
-using MusicSyncConverter.FileProviders.Abstractions;
+using MusicSyncConverter.FileProviders.SyncTargets;
 using MusicSyncConverter.Models;
 using MusicSyncConverter.Playlists;
 using System;
@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -88,7 +89,7 @@ namespace MusicSyncConverter
                 var syncTarget = await _syncTargetFactory.Get(config.TargetDir, cancellationToken);
                 using (syncTarget as IDisposable)
                 {
-                    var targetCaseSensitive = syncTarget.IsCaseSensitive();
+                    var targetCaseSensitive = await syncTarget.IsCaseSensitive();
                     var sourcePathComparer = new PathComparer(false); // TODO: determine if this is an issue
                     var targetPathComparer = new PathComparer(targetCaseSensitive);
 
@@ -104,7 +105,7 @@ namespace MusicSyncConverter
                     var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, x.TargetFilePath, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-                    var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(x => CompareSongDates(x, config, targetPathComparer, syncTarget), readOptions);
+                    var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(async x => await CompareSongDates(x, config, targetPathComparer, syncTarget).ToListAsync(), readOptions);
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // group files by their directory before comparing so we don't have to do a directory listing for every file
@@ -197,9 +198,9 @@ namespace MusicSyncConverter
 
                     // delete additional files and empty directories
                     Console.WriteLine("Checking for leftover files");
-                    DeleteAdditionalFiles(syncTarget, handledFiles, targetPathComparer, cancellationToken);
+                    await DeleteAdditionalFiles(syncTarget, handledFiles, targetPathComparer, cancellationToken);
                     Console.WriteLine("Checking for empty subdirectories");
-                    DeleteEmptySubdirectories("", syncTarget, cancellationToken);
+                    await DeleteEmptySubdirectories("", syncTarget, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
                 }
@@ -417,8 +418,8 @@ namespace MusicSyncConverter
                 playlistTargetSongs.Add(new PlaylistSong(PathUtils.MakeUnixPath(Path.GetRelativePath(playlistDirectoryPath, targetFilePath)), _sanitizer.SanitizeText(syncConfig.DeviceConfig.TagCharacterLimitations, songName, out _)));
             }
 
-            var targetPlaylistFileInfo = syncTarget.GetFileInfo(playlistPath);
-            if (allSongsFound && targetPlaylistFileInfo.Exists && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
+            var targetPlaylistFileInfo = await syncTarget.GetFileInfo(playlistPath, cancellationToken);
+            if (allSongsFound && targetPlaylistFileInfo != null && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
             {
                 handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath));
                 return null;
@@ -456,7 +457,7 @@ namespace MusicSyncConverter
             };
         }
 
-        private IEnumerable<SongReadWorkItem> CompareSongDates(SongSyncInfo[] syncInfos, SyncConfig config, PathComparer targetPathComparer, ISyncTarget syncTarget)
+        private async IAsyncEnumerable<SongReadWorkItem> CompareSongDates(SongSyncInfo[] syncInfos, SyncConfig config, PathComparer targetPathComparer, ISyncTarget syncTarget)
         {
             if (syncInfos.Length == 0)
                 yield break;
@@ -476,8 +477,7 @@ namespace MusicSyncConverter
 
             var targetDirPath = _pathTransformer.TransformPath(proposedDirPath, PathTransformType.DirPath, config.DeviceConfig, out _);
 
-            var directoryContents = syncTarget.GetDirectoryContents(targetDirPath);
-            var files = directoryContents.ToList();
+            var directoryContents = await syncTarget.GetDirectoryContents(targetDirPath);
 
             foreach (var syncInfo in syncInfos)
             {
@@ -486,7 +486,7 @@ namespace MusicSyncConverter
                 {
                     var targetPath = _pathTransformer.TransformPath(syncInfo.TargetPath, PathTransformType.FilePath, config.DeviceConfig, out var hasUnsupportedChars);
 
-                    var targetInfos = directoryContents.Exists ? files.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() : Array.Empty<IFileInfo>();
+                    var targetInfos = directoryContents?.Where(x => targetPathComparer.FileNameEquals(Path.GetFileNameWithoutExtension(targetPath), Path.GetFileNameWithoutExtension(x.Name))).ToArray() ?? Array.Empty<SyncTargetFileInfo>();
 
                     if (targetInfos.Length == 1 && FileDatesEqual(syncInfo.SourceFileInfo.ModifiedDate, targetInfos[0].LastModified))
                     {
@@ -688,19 +688,19 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteAdditionalFiles(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer targetPathComparer, CancellationToken cancellationToken)
+        private async Task DeleteAdditionalFiles(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer targetPathComparer, CancellationToken cancellationToken)
         {
-            var files = GetAllFiles("", syncTarget);
-            var toDelete = new List<IFileInfo>();
+            var files = GetAllFiles("", syncTarget, cancellationToken);
+            var toDelete = new List<SyncTargetFileInfo>();
 
             var normalizedHandledFiles = handledFiles.Select(x => new NormalizedPath(x.TargetPath)).ToHashSet();
-            foreach (var (path, file) in files)
+            await foreach (var (path, file) in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var normalizedPath = new NormalizedPath(path);
 
-                if (syncTarget.IsHidden(path, true))
+                if (await syncTarget.IsHidden(path, true))
                 {
                     // hidden file/dir
                     continue;
@@ -712,17 +712,18 @@ namespace MusicSyncConverter
                     Console.WriteLine($"Delete {path}");
                 }
             }
-            syncTarget.Delete(toDelete, cancellationToken);
+            await syncTarget.Delete(toDelete, cancellationToken);
         }
 
-        private IEnumerable<(string Path, IFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget)
+        private async IAsyncEnumerable<(string Path, SyncTargetFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            foreach (var fileInfo in syncTarget.GetDirectoryContents(directoryPath))
+            var contents = (await syncTarget.GetDirectoryContents(directoryPath, cancellationToken)) ?? throw new ArgumentException($"missing directory {directoryPath}");
+            foreach (var fileInfo in contents)
             {
                 var filePath = Path.Join(directoryPath, fileInfo.Name);
                 if (fileInfo.IsDirectory)
                 {
-                    foreach (var file in GetAllFiles(filePath, syncTarget))
+                    await foreach (var file in GetAllFiles(filePath, syncTarget, cancellationToken))
                     {
                         yield return file;
                     }
@@ -734,20 +735,22 @@ namespace MusicSyncConverter
             }
         }
 
-        private void DeleteEmptySubdirectories(string path, ISyncTarget syncTarget, CancellationToken cancellationToken)
+        private async Task DeleteEmptySubdirectories(string path, ISyncTarget syncTarget, CancellationToken cancellationToken)
         {
-            foreach (var item in syncTarget.GetDirectoryContents(path))
+            var content = (await syncTarget.GetDirectoryContents(path, cancellationToken)) ?? throw new ArgumentException($"missing directory {path}");
+            foreach (var item in content)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!item.IsDirectory || syncTarget.IsHidden(path, false))
+                if (!item.IsDirectory || await syncTarget.IsHidden(path, false))
                     continue;
 
                 string subDir = Path.Join(path, item.Name);
-                DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
-                if (!syncTarget.GetDirectoryContents(subDir).Any())
+                await DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
+                var subDirContents = (await syncTarget.GetDirectoryContents(subDir, cancellationToken)) ?? throw new ArgumentException($"missing directory {subDir}");
+                if (!subDirContents.Any())
                 {
                     Console.WriteLine($"Delete {subDir}");
-                    syncTarget.Delete(item, cancellationToken);
+                    await syncTarget.Delete(new[] { item }, cancellationToken);
                 }
             }
         }

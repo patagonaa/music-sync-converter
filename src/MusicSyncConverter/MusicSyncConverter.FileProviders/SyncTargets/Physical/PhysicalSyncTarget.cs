@@ -1,7 +1,4 @@
-﻿using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.FileProviders.Physical;
-using MusicSyncConverter.FileProviders.Abstractions;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -9,9 +6,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MusicSyncConverter.FileProviders.Physical
+namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
 {
-    class PhysicalSyncTarget : PhysicalFileProvider, ISyncTarget
+    class PhysicalSyncTarget : ISyncTarget
     {
         private readonly string _basePath;
         private readonly FatSortMode _sortMode;
@@ -20,7 +17,6 @@ namespace MusicSyncConverter.FileProviders.Physical
         private readonly FatSorter _fatSorter;
 
         public PhysicalSyncTarget(string basePath, FatSortMode sortMode)
-            : base(basePath, ExclusionFilters.None)
         {
             _basePath = basePath;
             _sortMode = sortMode;
@@ -29,9 +25,44 @@ namespace MusicSyncConverter.FileProviders.Physical
             _fatSorter = new FatSorter();
         }
 
+        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default)
+        {
+            var physicalPath = GetPhysicalPath(path);
+            if (File.Exists(physicalPath))
+            {
+                var fileInfo = new FileInfo(physicalPath);
+                return Task.FromResult<SyncTargetFileInfo?>(new SyncTargetFileInfo(path, fileInfo.Name, false, fileInfo.LastWriteTime));
+            }
+            else if (Directory.Exists(physicalPath))
+            {
+                var dirInfo = new DirectoryInfo(physicalPath);
+                return Task.FromResult<SyncTargetFileInfo?>(new SyncTargetFileInfo(path, dirInfo.Name, true, dirInfo.LastWriteTime));
+            }
+            else
+            {
+                return Task.FromResult<SyncTargetFileInfo?>(null);
+            }
+        }
+
+        public async Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default)
+        {
+            var physicalPath = GetPhysicalPath(subpath);
+            if (!Directory.Exists(physicalPath))
+                return null;
+            var toReturn = new List<SyncTargetFileInfo>();
+            foreach (var item in Directory.EnumerateFileSystemEntries(physicalPath))
+            {
+                var fileInfo = await GetFileInfo(Path.Join(subpath, Path.GetFileName(item)), cancellationToken);
+                if (fileInfo != null)
+                    toReturn.Add(fileInfo);
+            }
+
+            return toReturn;
+        }
+
         public async Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
-            var absolutePath = Path.Join(_basePath, path);
+            var absolutePath = GetPhysicalPath(path);
 
             var dirInfo = new DirectoryInfo(Path.GetDirectoryName(absolutePath)!);
             _updatedDirectories.TryAdd(new NormalizedPath(dirInfo.FullName), null);
@@ -55,7 +86,12 @@ namespace MusicSyncConverter.FileProviders.Physical
                 File.SetLastWriteTime(absolutePath, modified.Value.LocalDateTime);
         }
 
-        public bool IsCaseSensitive() => _isCaseSensitive;
+        private string GetPhysicalPath(string path)
+        {
+            return Path.Join(_basePath, path);
+        }
+
+        public Task<bool> IsCaseSensitive() => Task.FromResult(_isCaseSensitive);
 
         private bool IsCaseSensitiveInternal(string path)
         {
@@ -73,34 +109,29 @@ namespace MusicSyncConverter.FileProviders.Physical
             return toReturn;
         }
 
-        public Task Delete(IFileInfo file, CancellationToken cancellationToken)
+        public Task Delete(SyncTargetFileInfo file, CancellationToken cancellationToken)
         {
-            if (file is PhysicalFileInfo)
+            var physicalPath = GetPhysicalPath(file.Path);
+            if (file.IsDirectory)
             {
-                var targetFileFull = file.PhysicalPath;
-
-                File.Delete(targetFileFull);
-
-                // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
-                // https://twitter.com/patagona/status/1444626808935264261
-                if (File.Exists(targetFileFull))
-                {
-                    File.Delete(targetFileFull);
-                    Console.WriteLine($"Couldn't delete {targetFileFull} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
-                }
-            }
-            else if (file is PhysicalDirectoryInfo)
-            {
-                Directory.Delete(file.PhysicalPath);
+                Directory.Delete(physicalPath);
             }
             else
             {
-                throw new ArgumentException("file must be PhysicalFileInfo or PhysicalDirectoryInfo", nameof(file));
+                File.Delete(physicalPath);
+
+                // if this happens, we most likely ran into a stupid Windows VFAT Unicode bug that points different filenames to the same or separate files depending on the operation.
+                // https://twitter.com/patagona/status/1444626808935264261
+                if (File.Exists(physicalPath))
+                {
+                    File.Delete(physicalPath);
+                    Console.WriteLine($"Couldn't delete {physicalPath} on the first try. This is probably due to a Windows bug related to VFAT (FAT32) handling. Re-Run sync to fix this.");
+                }
             }
             return Task.CompletedTask;
         }
 
-        public Task Delete(IReadOnlyCollection<IFileInfo> files, CancellationToken cancellationToken)
+        public Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken)
         {
             foreach (var file in files)
             {
@@ -119,11 +150,11 @@ namespace MusicSyncConverter.FileProviders.Physical
             return Task.CompletedTask;
         }
 
-        public bool IsHidden(string path, bool recurse)
+        public Task<bool> IsHidden(string path, bool recurse) => Task.FromResult(IsHiddenInternal(path, recurse));
+        private bool IsHiddenInternal(string path, bool recurse)
         {
             if (recurse)
             {
-                var physicalPath = Root;
                 foreach (var pathPart in PathUtils.GetPathStack(path).Reverse())
                 {
                     if (pathPart.StartsWith('.'))
@@ -132,8 +163,7 @@ namespace MusicSyncConverter.FileProviders.Physical
                     // if we're on Windows (or macOS?), also check Hidden attribute
                     if (Environment.OSVersion.Platform != PlatformID.Unix)
                     {
-                        physicalPath = Path.Combine(physicalPath, pathPart);
-
+                        var physicalPath = GetPhysicalPath(pathPart);
                         var attributes = File.GetAttributes(physicalPath);
                         if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
                             return true;
@@ -149,10 +179,10 @@ namespace MusicSyncConverter.FileProviders.Physical
                     return true;
                 }
 
-                var physicalPath = Path.Combine(new[] { Root }.Concat(pathStack.Reverse()).ToArray());
                 // if we're on Windows (or macOS?), also check Hidden attribute
                 if (Environment.OSVersion.Platform != PlatformID.Unix)
                 {
+                    var physicalPath = GetPhysicalPath(path);
                     var attributes = File.GetAttributes(physicalPath);
                     if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
                         return true;
