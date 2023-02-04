@@ -25,36 +25,38 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             _fatSorter = new FatSorter();
         }
 
-        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default)
+        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default) => Task.FromResult<SyncTargetFileInfo?>(GetFileInfoInternal(path, cancellationToken));
+        public SyncTargetFileInfo? GetFileInfoInternal(string path, CancellationToken cancellationToken = default)
         {
             var physicalPath = GetPhysicalPath(path);
-            if (File.Exists(physicalPath))
+
+            var fileInfo = new FileInfo(physicalPath);
+            if (fileInfo.Exists)
             {
-                var fileInfo = new FileInfo(physicalPath);
-                return Task.FromResult<SyncTargetFileInfo?>(new SyncTargetFileInfo(path, fileInfo.Name, false, fileInfo.LastWriteTime));
+                return new SyncTargetFileInfo(path, fileInfo.Name, false, fileInfo.LastWriteTime);
             }
-            else if (Directory.Exists(physicalPath))
+
+            var dirInfo = new DirectoryInfo(physicalPath);
+            if (dirInfo.Exists)
             {
-                var dirInfo = new DirectoryInfo(physicalPath);
-                return Task.FromResult<SyncTargetFileInfo?>(new SyncTargetFileInfo(path, dirInfo.Name, true, dirInfo.LastWriteTime));
+                return new SyncTargetFileInfo(path, dirInfo.Name, true, dirInfo.LastWriteTime);
             }
-            else
-            {
-                return Task.FromResult<SyncTargetFileInfo?>(null);
-            }
+
+            return null;
         }
 
-        public async Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default)
+        public Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default) => Task.FromResult(GetDirectoryContentsInternal(subpath, cancellationToken));
+        public IList<SyncTargetFileInfo>? GetDirectoryContentsInternal(string subpath, CancellationToken cancellationToken = default)
         {
             var physicalPath = GetPhysicalPath(subpath);
-            if (!Directory.Exists(physicalPath))
+            var dirInfo = new DirectoryInfo(physicalPath);
+            if (!dirInfo.Exists)
                 return null;
             var toReturn = new List<SyncTargetFileInfo>();
-            foreach (var item in Directory.EnumerateFileSystemEntries(physicalPath))
+            foreach (var item in dirInfo.EnumerateFileSystemInfos())
             {
-                var fileInfo = await GetFileInfo(Path.Join(subpath, Path.GetFileName(item)), cancellationToken);
-                if (fileInfo != null)
-                    toReturn.Add(fileInfo);
+                cancellationToken.ThrowIfCancellationRequested();
+                toReturn.Add(new SyncTargetFileInfo(Path.Join(subpath, item.Name), item.Name, item is DirectoryInfo, item.LastWriteTime));
             }
 
             return toReturn;
