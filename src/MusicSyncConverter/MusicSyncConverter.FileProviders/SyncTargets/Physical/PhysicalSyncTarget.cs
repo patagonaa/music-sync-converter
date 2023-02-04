@@ -155,15 +155,19 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
         {
             if (recurse)
             {
+                var currentPath = string.Empty;
+
                 foreach (var pathPart in PathUtils.GetPathStack(path).Reverse())
                 {
                     if (pathPart.StartsWith('.'))
                         return true;
 
+                    currentPath = Path.Join(currentPath, pathPart);
+
                     // if we're on Windows (or macOS?), also check Hidden attribute
                     if (Environment.OSVersion.Platform != PlatformID.Unix)
                     {
-                        var physicalPath = GetPhysicalPath(pathPart);
+                        var physicalPath = GetPhysicalPath(currentPath);
                         var attributes = File.GetAttributes(physicalPath);
                         if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
                             return true;
