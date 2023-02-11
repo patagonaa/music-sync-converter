@@ -33,13 +33,13 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             var fileInfo = new FileInfo(physicalPath);
             if (fileInfo.Exists)
             {
-                return new SyncTargetFileInfo(path, fileInfo.Name, false, fileInfo.LastWriteTime);
+                return new SyncTargetFileInfo(path, false, fileInfo.LastWriteTime);
             }
 
             var dirInfo = new DirectoryInfo(physicalPath);
             if (dirInfo.Exists)
             {
-                return new SyncTargetFileInfo(path, dirInfo.Name, true, dirInfo.LastWriteTime);
+                return new SyncTargetFileInfo(path, true, dirInfo.LastWriteTime);
             }
 
             return null;
@@ -56,7 +56,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             foreach (var item in dirInfo.EnumerateFileSystemInfos())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                toReturn.Add(new SyncTargetFileInfo(Path.Join(subpath, item.Name), item.Name, item is DirectoryInfo, item.LastWriteTime));
+                toReturn.Add(new SyncTargetFileInfo(Path.Join(subpath, item.Name), item is DirectoryInfo, item.LastWriteTime));
             }
 
             return toReturn;

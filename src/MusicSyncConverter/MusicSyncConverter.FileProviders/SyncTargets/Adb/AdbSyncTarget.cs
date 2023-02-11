@@ -135,9 +135,9 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             return MapToFileInfo(stat, subpath);
         }
 
-        private SyncTargetFileInfo MapToFileInfo(StatEntry stat, string fullPath)
+        private SyncTargetFileInfo MapToFileInfo(StatEntry stat, string path)
         {
-            return new SyncTargetFileInfo(fullPath, stat.Path, stat.Mode.HasFlag(UnixFileMode.Directory), stat.ModifiedTime);
+            return new SyncTargetFileInfo(path, stat.Mode.HasFlag(UnixFileMode.Directory), stat.ModifiedTime);
         }
 
         public Task<bool> IsCaseSensitive()

@@ -248,7 +248,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                 throw new InvalidOperationException($"object with ID {obj} has no name");
             }
 
-            return new SyncTargetFileInfo(Path.Join(directoryPath, name), name, isDirectory, lastModified);
+            return new SyncTargetFileInfo(Path.Join(directoryPath, name), isDirectory, lastModified);
         }
 
         private string? GetObjectId(string objPath)
