@@ -82,7 +82,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                 var sw = Stopwatch.StartNew();
                 var directoryObjectId = CreateDirectoryStructure(Path.GetDirectoryName(path) ?? throw new ArgumentNullException(nameof(path)));
                 var fileName = Path.GetFileName(path);
-                Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds+"ms");
+                Debug.WriteLine("CreateDir " + sw.ElapsedMilliseconds + "ms");
                 sw.Restart();
 
                 var existingFileObjId = GetObjectId(fileName, directoryObjectId);
@@ -93,7 +93,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                     _content.Delete(DELETE_OBJECT_OPTIONS.PORTABLE_DEVICE_DELETE_NO_RECURSION, objsToDelete);
                 }
 
-                Debug.WriteLine("DeleteExisting " + sw.ElapsedMilliseconds+"ms");
+                Debug.WriteLine("DeleteExisting " + sw.ElapsedMilliseconds + "ms");
                 sw.Restart();
 
                 var properties = new IPortableDeviceValues();
@@ -191,7 +191,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                 if (!_directoryContentsCache.TryGetValue(normalizedSubPath, out IList<SyncTargetFileInfo>? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
-                    if(obj == null)
+                    if (obj == null)
                     {
                         directoryContents = null;
                     }

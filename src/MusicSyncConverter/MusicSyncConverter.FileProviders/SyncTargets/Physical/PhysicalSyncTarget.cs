@@ -25,7 +25,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             _fatSorter = new FatSorter();
         }
 
-        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default) => Task.FromResult<SyncTargetFileInfo?>(GetFileInfoInternal(path, cancellationToken));
+        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default) => Task.FromResult(GetFileInfoInternal(path, cancellationToken));
         public SyncTargetFileInfo? GetFileInfoInternal(string path, CancellationToken cancellationToken = default)
         {
             var physicalPath = GetPhysicalPath(path);
