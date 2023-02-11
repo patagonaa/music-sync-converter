@@ -117,25 +117,30 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         {
             var path = GetUnixPath(subpath);
 
-            var stat = await _syncService.Stat(path, cancellationToken);
+            var stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
             if (stat.Mode == 0)
                 return null;
 
-            var dirList = await _syncService.List(path, cancellationToken);
-            return dirList.Select(x => MapToFileInfo(x, Path.Join(path, x.Path))).ToList();
+            var dirList = await _syncService.ListV2(path, cancellationToken);
+            return dirList.Select(x => MapToFileInfo(x, Path.Join(subpath, GetFileName(x.FullPath)))).ToList();
+        }
+
+        private static string GetFileName(string path)
+        {
+            return path.Split('/').Last();
         }
 
         public async Task<SyncTargetFileInfo?> GetFileInfo(string subpath, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
 
-            var stat = await _syncService.Stat(path, cancellationToken);
+            var stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
             if (stat.Mode == 0)
                 return null;
             return MapToFileInfo(stat, subpath);
         }
 
-        private SyncTargetFileInfo MapToFileInfo(StatEntry stat, string path)
+        private static SyncTargetFileInfo MapToFileInfo(StatV2Entry stat, string path)
         {
             return new SyncTargetFileInfo(path, stat.Mode.HasFlag(UnixFileMode.Directory), stat.ModifiedTime);
         }
