@@ -694,13 +694,13 @@ namespace MusicSyncConverter
             var toDelete = new List<SyncTargetFileInfo>();
 
             var normalizedHandledFiles = handledFiles.Select(x => new NormalizedPath(x.TargetPath)).ToHashSet();
-            await foreach (var (path, file) in files)
+            await foreach (var file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var normalizedPath = new NormalizedPath(path);
+                var normalizedPath = new NormalizedPath(file.Path);
 
-                if (await syncTarget.IsHidden(path, true))
+                if (await syncTarget.IsHidden(file.Path, true))
                 {
                     // hidden file/dir
                     continue;
@@ -709,28 +709,27 @@ namespace MusicSyncConverter
                 if (!normalizedHandledFiles.Contains(normalizedPath, targetPathComparer))
                 {
                     toDelete.Add(file);
-                    Console.WriteLine($"Delete {path}");
+                    Console.WriteLine($"Delete {file.Path}");
                 }
             }
             await syncTarget.Delete(toDelete, cancellationToken);
         }
 
-        private async IAsyncEnumerable<(string Path, SyncTargetFileInfo File)> GetAllFiles(string directoryPath, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
+        private async IAsyncEnumerable<SyncTargetFileInfo> GetAllFiles(string directoryPath, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var contents = (await syncTarget.GetDirectoryContents(directoryPath, cancellationToken)) ?? throw new ArgumentException($"missing directory {directoryPath}");
             foreach (var fileInfo in contents)
             {
-                var filePath = Path.Join(directoryPath, fileInfo.Name);
                 if (fileInfo.IsDirectory)
                 {
-                    await foreach (var file in GetAllFiles(filePath, syncTarget, cancellationToken))
+                    await foreach (var file in GetAllFiles(fileInfo.Path, syncTarget, cancellationToken))
                     {
                         yield return file;
                     }
                 }
                 else
                 {
-                    yield return (filePath, fileInfo);
+                    yield return fileInfo;
                 }
             }
         }
