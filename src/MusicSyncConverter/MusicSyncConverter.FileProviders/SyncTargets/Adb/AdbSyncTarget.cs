@@ -116,10 +116,16 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         public async Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
-
-            var stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
-            if (stat.Mode == 0)
-                return null;
+            try
+            {
+                await _syncService.StatV2(path, cancellationToken: cancellationToken);
+            }
+            catch (AdbSyncException ex)
+            {
+                if (ex.ErrorCode == AdbSyncErrorCode.ENOENT)
+                    return null;
+                throw;
+            }
 
             var dirList = await _syncService.ListV2(path, cancellationToken);
             return dirList.Select(x => MapToFileInfo(x, Path.Join(subpath, GetFileName(x.FullPath)))).ToList();
