@@ -9,6 +9,18 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer : ITextSanitizer
     {
+        private static readonly char[] _pathUnsupportedChars;
+
+        static TextSanitizer()
+        {
+            var chars = "\"<>|:*?\\/";
+            _pathUnsupportedChars = Path.GetInvalidFileNameChars()
+                .Concat(chars)
+                .Concat(Enumerable.Range(0, 32).Select(x => (char)x))
+                .Distinct()
+                .ToArray();
+        }
+
         public string SanitizePathPart(CharacterLimitations? config, string part, out bool hasUnsupportedChars)
         {
             hasUnsupportedChars = false;
@@ -34,8 +46,6 @@ namespace MusicSyncConverter
 
             var toReturn = new StringBuilder();
 
-            var pathUnsupportedChars = Path.GetInvalidFileNameChars();
-
             hasUnsupportedChars = false;
 
             var supportedRunes = config.SupportedChars?.EnumerateRunes().ToList();
@@ -52,7 +62,7 @@ namespace MusicSyncConverter
                 else if (NeedsNormalization(config.NormalizationMode, supportedRunes, inChar))
                 {
                     var normalized = inChar.ToString().Normalize(NormalizationForm.FormKC);
-                    if (normalized.Any(x => pathUnsupportedChars.Contains(x)))
+                    if (normalized.Any(x => _pathUnsupportedChars.Contains(x)))
                     {
                         toInsert = inChar.ToString();
                     }
@@ -75,7 +85,7 @@ namespace MusicSyncConverter
                     var outCharStr = outChar.ToString();
 
                     // if this is a path, replace chars that are invalid for path names
-                    if (isForPath && outCharStr.Any(x => pathUnsupportedChars.Contains(x)))
+                    if (isForPath && outCharStr.Any(x => _pathUnsupportedChars.Contains(x)))
                     {
                         hasUnsupportedChars = true;
                         toReturn.Append('_');
