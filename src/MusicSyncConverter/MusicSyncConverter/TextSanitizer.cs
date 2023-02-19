@@ -9,9 +9,9 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer : ITextSanitizer
     {
-        private static readonly char[] _pathUnsupportedChars;
+        private readonly char[] _pathUnsupportedChars;
 
-        static TextSanitizer()
+        public TextSanitizer()
         {
             var chars = "\"<>|:*?\\/";
             _pathUnsupportedChars = Path.GetInvalidFileNameChars()
@@ -40,7 +40,7 @@ namespace MusicSyncConverter
             return Sanitize(config, text, false, out hasUnsupportedChars);
         }
 
-        private static string Sanitize(CharacterLimitations? config, string text, bool isForPath, out bool hasUnsupportedChars)
+        private string Sanitize(CharacterLimitations? config, string text, bool isForPath, out bool hasUnsupportedChars)
         {
             config ??= new CharacterLimitations();
 
@@ -55,20 +55,20 @@ namespace MusicSyncConverter
                 string toInsert;
 
                 var replacement = config.Replacements?.FirstOrDefault(x => x.Rune == inChar);
-                if (replacement != null)
+                if (replacement != null && (!isForPath || IsValidPath(replacement.Replacement)))
                 {
                     toInsert = replacement.Replacement ?? string.Empty;
                 }
                 else if (NeedsNormalization(config.NormalizationMode, supportedRunes, inChar))
                 {
                     var normalized = inChar.ToString().Normalize(NormalizationForm.FormKC);
-                    if (normalized.Any(x => _pathUnsupportedChars.Contains(x)))
+                    if (!isForPath || IsValidPath(normalized))
                     {
-                        toInsert = inChar.ToString();
+                        toInsert = normalized;
                     }
                     else
                     {
-                        toInsert = normalized;
+                        toInsert = inChar.ToString();
                     }
 
                     if (config.NormalizationMode == UnicodeNormalizationMode.NonBmp && toInsert.Length > 1)
@@ -85,7 +85,7 @@ namespace MusicSyncConverter
                     var outCharStr = outChar.ToString();
 
                     // if this is a path, replace chars that are invalid for path names
-                    if (isForPath && outCharStr.Any(x => _pathUnsupportedChars.Contains(x)))
+                    if (isForPath && !IsValidPath(outCharStr))
                     {
                         hasUnsupportedChars = true;
                         toReturn.Append('_');
@@ -105,6 +105,13 @@ namespace MusicSyncConverter
             }
 
             return toReturn.ToString();
+        }
+
+        private bool IsValidPath(string? path)
+        {
+            if (path == null)
+                return false;
+            return path.All(x => !_pathUnsupportedChars.Contains(x));
         }
 
         private static bool NeedsNormalization(UnicodeNormalizationMode normalizationMode, IList<Rune>? supportedRunes, Rune inChar)

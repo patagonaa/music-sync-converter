@@ -95,6 +95,7 @@ namespace MusicSyncConverter.UnitTests
         [TestCase("ABC", "ABC", "")]
         [TestCase("4,63 × 10¹⁷⁰", "4,63 × 10¹⁷⁰", "×¹⁷⁰")]
         [TestCase("𓃒", "𓃒", "")]
+        [TestCase("/", "／", "")]
         public void Test_Limitations_NormalizeUnsupported_ReplaceUnsupportedChars(string expected, string text, string supportedChars)
         {
             var limitations = new CharacterLimitations
@@ -108,13 +109,17 @@ namespace MusicSyncConverter.UnitTests
         }
 
         [TestCase("02 ♫ II／ The SALON.flac", "02 ♫ Ⅱ／ The SALON.flac")]
+        [TestCase("07 Rod ♥ You.flac", "07 Rod ♥ You.flac")]
         public void Test_Limitations_NormalizeUnsupported_DontCreatePathInvalidChar(string expected, string text)
         {
             var limitations = new CharacterLimitations
             {
-                Replacements = null,
+                Replacements = new CharReplacement[]
+                {
+                    new CharReplacement{ Char = "♥", Replacement = "<3" }
+                },
                 NormalizationMode = UnicodeNormalizationMode.Unsupported,
-                SupportedChars = "02 The SALON.flac"
+                SupportedChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz."
             };
             var result = _sut.SanitizePathPart(limitations, text, out _);
             Assert.AreEqual(expected, result);
@@ -135,7 +140,5 @@ namespace MusicSyncConverter.UnitTests
             var result = _sut.SanitizeText(limitations, text, out _);
             Assert.AreEqual(expected, result);
         }
-
-
     }
 }
