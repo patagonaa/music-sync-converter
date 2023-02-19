@@ -34,9 +34,19 @@ namespace MusicSyncConverter
 
             var cts = new CancellationTokenSource();
 
-            // we can't use Console.CancelKeyPress as without Console.TreatControlCAsInput all child processes get the Ctrl+C signal as well, which we don't want.
-            var cancelThread = new Thread(() => CancelThread(cts));
-            cancelThread.Start();
+            try
+            {
+                // only available on Windows
+                _ = Console.KeyAvailable;
+
+                // we can't use Console.CancelKeyPress as without Console.TreatControlCAsInput all child processes get the Ctrl+C signal as well, which we don't want.
+                var cancelThread = new Thread(() => CancelThread(cts));
+                cancelThread.Start();
+            }
+            catch (InvalidOperationException)
+            {
+                Console.CancelKeyPress += (o, args) => { cts.Cancel(); args.Cancel = true; };
+            }
 
             var logger = new MemoryLogger();
             try
