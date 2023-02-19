@@ -51,7 +51,16 @@ namespace MusicSyncConverter
                 }
                 else if (NeedsNormalization(config.NormalizationMode, supportedRunes, inChar))
                 {
-                    toInsert = inChar.ToString().Normalize(NormalizationForm.FormKC);
+                    var normalized = inChar.ToString().Normalize(NormalizationForm.FormKC);
+                    if (normalized.Any(x => pathUnsupportedChars.Contains(x)))
+                    {
+                        toInsert = inChar.ToString();
+                    }
+                    else
+                    {
+                        toInsert = normalized;
+                    }
+
                     if (config.NormalizationMode == UnicodeNormalizationMode.NonBmp && toInsert.Length > 1)
                         toInsert = "_";
                     hasUnsupportedChars = true;

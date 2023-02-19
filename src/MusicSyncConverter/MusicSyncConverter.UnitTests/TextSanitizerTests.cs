@@ -107,6 +107,19 @@ namespace MusicSyncConverter.UnitTests
             Assert.AreEqual(expected, result);
         }
 
+        [TestCase("02 ♫ II／ The SALON.flac", "02 ♫ Ⅱ／ The SALON.flac")]
+        public void Test_Limitations_NormalizeUnsupported_DontCreatePathInvalidChar(string expected, string text)
+        {
+            var limitations = new CharacterLimitations
+            {
+                Replacements = null,
+                NormalizationMode = UnicodeNormalizationMode.Unsupported,
+                SupportedChars = "02 The SALON.flac"
+            };
+            var result = _sut.SanitizePathPart(limitations, text, out _);
+            Assert.AreEqual(expected, result);
+        }
+
         [Ignore("this is kinda messy to handle so I don't care")]
         [TestCase("testCombinedEmoji123", "test👨‍👩‍👧‍👦123")]
         public void Test_Limitations_CombinedEmojiText_Replacements(string expected, string text)
