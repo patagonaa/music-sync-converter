@@ -23,11 +23,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets
             {
                 case "file":
                     {
-                        var pathQuerySplit = uriString.Replace("file://", "").Split('?');
-                        var sortMode = pathQuerySplit.Length == 2 && Enum.TryParse<FatSortMode>(HttpUtility.ParseQueryString(pathQuerySplit[1])["fatSortMode"], out var sortModeTmp)
-                            ? sortModeTmp
-                            : FatSortMode.None;
-                        var path = pathQuerySplit[0];
+                        var (path, sortMode) = ParseFileUri(uriString);
                         Directory.CreateDirectory(path);
                         return new PhysicalSyncTarget(path, sortMode);
                     }
@@ -50,6 +46,27 @@ namespace MusicSyncConverter.FileProviders.SyncTargets
                 default:
                     throw new ArgumentException($"Invalid URI Scheme: {splitUri[0]}");
             }
+        }
+
+        private static (string Path, FatSortMode FatSortMode) ParseFileUri(string uriString)
+        {
+            var pathQuerySplit = uriString.Replace("file://", "").Split('?');
+            FatSortMode sortMode;
+            if (pathQuerySplit.Length > 2)
+            {
+                throw new ArgumentException("Uri has more than one question mark. Use '%2F' to escape quastion marks within the path.");
+            }
+            else if (pathQuerySplit.Length == 2 && Enum.TryParse<FatSortMode>(HttpUtility.ParseQueryString(pathQuerySplit[1])["fatSortMode"], out var sortModeTmp))
+            {
+                sortMode = sortModeTmp;
+            }
+            else
+            {
+                sortMode = FatSortMode.None;
+            }
+            string path = HttpUtility.UrlDecode(pathQuerySplit[0]);
+
+            return (path, sortMode);
         }
     }
 }
