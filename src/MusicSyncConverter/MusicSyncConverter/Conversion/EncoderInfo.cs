@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace MusicSyncConverter.Conversion
+﻿namespace MusicSyncConverter.Conversion
 {
     public class EncoderInfo
     {

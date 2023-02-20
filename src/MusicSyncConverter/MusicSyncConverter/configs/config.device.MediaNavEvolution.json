@@ -21,7 +21,29 @@
             "Channels": 2
         },
         "CharacterLimitations": {
-            "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±²³´½ÄÅÖ×ÜßäåðöüЁАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяё†…⇧",
+            "SupportedChars": "ɐɑɓɔɖɗəɛɠɡɣɨɩɯɲɵʀʃʈʉʊʋʌʒ ←↑→↓↔↕↖↗↘↙↸↹⇧ ★☆☉♀♁♂♭♯ 　、。〃〄々〆〇〈〉《》「」『』【】〒〓〔〕〖〗〝〞〟〡〢〣〤〥〦〧〨〩〨〩〾",
+            "SupportedUnicodeRanges": [
+                "BasicLatin",
+                "Latin1Supplement",
+                "LatinExtendedA",
+                "LatinExtendedB",
+                "GreekandCoptic",
+                "Cyrillic",
+                "Hebrew",
+                "Arabic",
+                "Devanagari",
+                "Thai",
+                "LatinExtendedAdditional",
+                "GeneralPunctuation",
+                "SuperscriptsandSubscripts",
+                "NumberForms",
+                "Hiragana",
+                "Katakana",
+                "CjkUnifiedIdeographs",
+                "HangulSyllables",
+                "ArabicPresentationFormsB",
+                "HalfwidthandFullwidthForms"
+            ],
             "Replacements": [
                 {
                     "Char": "♥",

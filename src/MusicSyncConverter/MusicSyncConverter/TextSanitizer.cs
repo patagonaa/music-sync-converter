@@ -3,15 +3,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Text.Unicode;
 
 namespace MusicSyncConverter
 {
     public class TextSanitizer : ITextSanitizer
     {
-        private readonly char[] _pathUnsupportedChars;
+        private static readonly char[] _pathUnsupportedChars;
+        private static readonly Dictionary<string, (int Start, int End)> _unicodeRanges;
 
-        public TextSanitizer()
+        static TextSanitizer()
         {
             var chars = "\"<>|:*?\\/";
             _pathUnsupportedChars = Path.GetInvalidFileNameChars()
@@ -19,6 +22,17 @@ namespace MusicSyncConverter
                 .Concat(Enumerable.Range(0, 32).Select(x => (char)x))
                 .Distinct()
                 .ToArray();
+
+            _unicodeRanges = new Dictionary<string, (int Start, int End)>();
+            var rangeProperties = typeof(UnicodeRanges).GetProperties(BindingFlags.Public | BindingFlags.Static);
+            foreach (var rangeProp in rangeProperties)
+            {
+                var range = (UnicodeRange?)rangeProp.GetValue(null);
+                if (range != null)
+                    _unicodeRanges[rangeProp.Name] = (range.FirstCodePoint, range.FirstCodePoint + range.Length - 1);
+            }
+            _unicodeRanges["EgyptianHieroglyphs"] = (0x13000, 0x1342F);
+            _unicodeRanges["MathematicalAlphanumericSymbols"] = (0x1D400, 0x1D7FF);
         }
 
         public string SanitizePathPart(CharacterLimitations? config, string part, out bool hasUnsupportedChars)
@@ -48,8 +62,6 @@ namespace MusicSyncConverter
 
             hasUnsupportedChars = false;
 
-            var supportedRunes = config.SupportedChars?.EnumerateRunes().ToList();
-
             foreach (var inChar in text.EnumerateRunes())
             {
                 string toInsert;
@@ -59,7 +71,7 @@ namespace MusicSyncConverter
                 {
                     toInsert = replacement.Replacement ?? string.Empty;
                 }
-                else if (NeedsNormalization(config.NormalizationMode, supportedRunes, inChar))
+                else if (NeedsNormalization(config, inChar))
                 {
                     var normalized = inChar.ToString().Normalize(NormalizationForm.FormKC);
                     if (!isForPath || IsValidPath(normalized))
@@ -90,7 +102,7 @@ namespace MusicSyncConverter
                         hasUnsupportedChars = true;
                         toReturn.Append('_');
                     }
-                    else if (supportedRunes != null && !supportedRunes.Contains(outChar))
+                    else if (!IsSupportedRune(outChar, config))
                     {
                         // we just accept our faith and insert the character anyways
                         hasUnsupportedChars = true;
@@ -107,22 +119,43 @@ namespace MusicSyncConverter
             return toReturn.ToString();
         }
 
-        private bool IsValidPath(string? path)
+        private static bool IsSupportedRune(Rune rune, CharacterLimitations characterLimitations)
+        {
+            if (characterLimitations.SupportedChars == null && characterLimitations.SupportedUnicodeRanges == null)
+                return true;
+
+            if (characterLimitations.SupportedChars?.Contains(rune.ToString()) ?? false)
+            {
+                return true;
+            }
+            foreach (var unicodeRangeName in characterLimitations.SupportedUnicodeRanges ?? Array.Empty<string>())
+            {
+                if (!_unicodeRanges.TryGetValue(unicodeRangeName, out var unicodeRange))
+                    throw new ArgumentException($"Invalid Unicode Range {unicodeRangeName}");
+
+                if (rune.Value >= unicodeRange.Start && rune.Value <= unicodeRange.End)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsValidPath(string? path)
         {
             if (path == null)
                 return false;
             return path.All(x => !_pathUnsupportedChars.Contains(x));
         }
 
-        private static bool NeedsNormalization(UnicodeNormalizationMode normalizationMode, IList<Rune>? supportedRunes, Rune inChar)
+        private static bool NeedsNormalization(CharacterLimitations characterLimitations, Rune inChar)
         {
-            return normalizationMode switch
+            return characterLimitations.NormalizationMode switch
             {
                 UnicodeNormalizationMode.None => false,
                 UnicodeNormalizationMode.NonBmp => !inChar.IsBmp,
-                UnicodeNormalizationMode.Unsupported => supportedRunes != null && !supportedRunes.Contains(inChar),
+                UnicodeNormalizationMode.Unsupported => !IsSupportedRune(inChar, characterLimitations),
                 UnicodeNormalizationMode.All => true,
-                _ => throw new ArgumentOutOfRangeException(nameof(normalizationMode)),
+                _ => throw new ArgumentOutOfRangeException(nameof(characterLimitations)),
             };
         }
     }
