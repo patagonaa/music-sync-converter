@@ -27,6 +27,7 @@ Works on Windows and Linux, macOS is untested.
     - .NET 6 SDK
     - ffmpeg (including ffprobe)
 - optional
+    - adb (for sync to Android devices via adb)
     - flac (including metaflac) to handle flac files with multiple tag values correctly
     - vorbis-tools (including vorbiscomment) to handle ogg / opus files with multiple tag values correctly
 
@@ -34,7 +35,11 @@ All of these should be installed so they are are in PATH.
 
 .NET SDK can be found at https://dotnet.microsoft.com/en-us/download for all platforms
 
-On Windows, you can get those at https://www.gyan.dev/ffmpeg/builds/ https://ftp.osuosl.org/pub/xiph/releases/flac/ https://ftp.osuosl.org/pub/xiph/releases/vorbis/ and add them to the PATH variable.
+Windows:
+- ffmpeg: https://www.gyan.dev/ffmpeg/builds/
+- flac: https://ftp.osuosl.org/pub/xiph/releases/flac/ 
+- vorbis-tools: https://ftp.osuosl.org/pub/xiph/releases/vorbis/
+These have to be added to PATH manually.
 
 On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac vorbis-tools`).
 
@@ -43,12 +48,17 @@ On Linux/MacOS you can probably just install these using the package manager (e.
 
 You can split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
 
-### Supported sources / targets
-Instead of just syncing from directory to directory you can use some different file providers (or even write your own):
-#### Sources
+## Config options
+Also see [example configs below](#example-configs).
+
+### SourceDir
+The source directory as an URI.
 - File system: `file://` (for example `file://C:/Users/me/Music` or `file://~/Music` or `file:///home/me/Music`)
 - WebDAV: `http(s)://` (for example `https://user:password@nextcloud.example.com/remote.php/dav/files/me/Music`)
-#### Targets
+
+### TargetDir
+The target directory as an URI.
+Be aware that everything in this directory will be deleted (unless it is hidden or already synchronized to the source dir).
 - File system: `file://` (for example `file://F:/Music` or `file:///mnt/usb/Music`)
     - supports the query parameter `?fatSortMode=<mode>` where `<mode>` is `None`, `Folders`, `Files`, `FilesAndFolders` to sort the FAT32 table when directories change. This is useful for devices that don't sort files or directory by name.
 - (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices): `wpd://` (for example `wpd://My Android Phone/disk/Music`)
@@ -56,16 +66,20 @@ Instead of just syncing from directory to directory you can use some different f
 - ADB: `adb://` (for example `adb://abcdABCD12345678//storage/0815-ACAB/Music` where `abcdABCD12345678` is the device serial number and `/storage/0815-ACAB/Music` is the base directory)
     - this requires ADB to be installed globally (available in `PATH`) or an ADB daemon to be already running
 
-### Excludes
-You can exclude files by adding directories to the `Exclude` array in the config file.
-Wildcards `*` (any directory) and `**` (any directory structure) are supported
-Examples: 
+### Exclude
+Array of files or directories you want to exclude.
+Wildcards `*` (any directory) and `**` (any directory structure) are supported.
+
+Examples:
 - `Audio Books` ignores `Audio Books/` in the root folder
 - `Music/**/Instrumentals` ignores `Music/Example Artist/Instrumentals` and `Music/Albums/Example Artist/Instrumentals`
 - `Music/*/Instrumentals` ignores `Music/Example Artist/Instrumentals` but not `Music/Albums/Example Artist/Instrumentals`
-- `Music/Albums/**/*.m3u` ignores `Music/Artists/Example Artist/playlist.m3u` but not `Music/Playlists/playlist.m3u`
+- `Music/Albums/**/*.m3u` ignores `Music/Albums/Example Artist/playlist.m3u` but not `Music/Playlists/playlist.m3u`
 
-### Formats
+### DeviceConfig
+In case you want to sync your music to multiple devices, it may be helpful to put this section in a seperate file each.
+
+#### SupportedFormats
 Format conversion works by analyzing the source file, comparing the format against the configured supported formats and converting to the configured fallback format if necessary
 
 The supported format includes:
@@ -88,37 +102,49 @@ Stream #0:0: Audio: mp3
               Codec ^
 ```
 
+#### FallbackFormat
 The fallback format includes:
 - `Extension`: File extension (required)
+- `Muxer`: Muxer (usually the container format), for example `mp3`, `ogg`, `ipod` (required)
 - `Codec`: Codec as required by ffmpeg, for example `libmp3lame`, `libopus` or `aac` (required)
 - `Profile`: Profile as required by ffmpeg
 - `Channels`: Number of audio channels
 - `SampleRateHz`: Sample rate in Hz
-- `Muxer`: Muxer, for example `ipod`
 - `AdditionalFlags`: Additional parameters to pass to ffmpeg, for example `-movflags faststart`, which is required by a lot of players using the `mp4` or `ipod` muxer
 - `Bitrate`: Bitrate in kbit/s
 - `CoverCodec`: Format to use for album covers (`mjpeg` = jpg, `png` = png, `null` = remove album covers)
 - `MaxCoverSize`: Max. cover size in either axis
 
-"as required for ffmpeg" =>
+"as required by ffmpeg" =>
 ```
 ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
            Encoder/Codec ^              ^ Profile (if applicable)
 ```
 
-See below for an example config.
+##### Album covers
+If there are files named `cover.png`, `cover.jpg`, `folder.jpg`, in a song's directory, the album cover is added to the song (if the fallback format includes a cover codec).
+If there's already an album cover embedded in the file, that one will be preferred.
 
-### Album covers
-If there are files named `cover.png`, `cover.jpg`, `folder.jpg`, in a song's directory, the album cover is added to the song (if the fallback format includes a cover codec)
 
-### Playlists
+#### (Path/Tag)CharacterLimitations
+Use this as to replace characters that aren't supported by your device (either in path name, tags, or both).
+
+- `SupportedUnicodeRanges`: Supported Unicode ranges (e.g. `BasicLatin`, `Latin1Supplement`, `GeneralPunctuation`, etc.)
+- `SupportedCharacters`: Additional supported characters
+- `Replacements`: Manual replacement chars (for `ä` -> `ae` etc.)
+- `NormalizationMode`
+    - `None`: Off
+    - `NonBmp`: Replace all non-BMP characters (characters above U+FFFF). Usually required on Android as it doesn't support those characters
+    - `Unsupported`: Try to replace characters not in supported list
+
+Characters that are unsupported in file/path names will be replaced by `_` automatically.
+
+#### ResolvePlaylists
 There are two ways to handle `m3u` / `m3u8` playlists:
-#### ResolvePlaylists false (default)
+##### `false` (default):
 Each playlist is copied to the target directory. All references are updated to point to the correct file if required (e.g. if the file extension changes due to a format conversion).
 
-All songs referenced by the playlist should be included in the sync task or the songs will be excluded from the playlist and a warning will be logged.
-
-#### ResolvePlaylists true
+##### `true`:
 Each playlist is created as a directory containing the referenced songs.
 The `EXTINF` name is used as a file name if available (else the source file name is used).
 so the playlist `Playlists/Test.m3u8`
@@ -130,10 +156,45 @@ with the contents
 ```
 results in the directory `Playlists/Test/` with the file `An Artist - Song 4.flac`
 
-### Example config:
+#### TagValueDelimiter
+If set, multiple tags (for example multiple artists) will be separated by this character.
+
+#### NormalizeCase
+If `true`, makes the first character of each file/path name uppercase. Useful for devices that sort by ASCII code instead of (case-insensitive) letter.
+
+### PathFormatOverrides
+Use this to overwrite encoder settings depending on the directory that is being converted.
+
+### WorkersRead/WorkersConvert/WorkersWrite
+The number of workers to use for each step.
+
+## Example configs:
+### Minimal config:
+- Sync `Z:\Audio` to `E:\Audio`
+- Convert all files (regardless of current format) to 192kbit/s MP3
+- keep/embed album art as 320x320px JPEG
+
+```js
+{
+    "SourceDir": "file://Z:\\Audio\\",
+    "TargetDir": "file://E:\\Audio\\",
+    "DeviceConfig": {
+        "FallbackFormat": {
+            "Extension": ".mp3",
+            "Codec": "mp3", // as required by ffmpeg (-c:a aac)
+            "Muxer": "mp3", // as required by ffmpeg (usually, this is the container format)
+            "Bitrate": 192, // kbit/s
+            "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
+            "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)
+        }
+    }
+}
+```
+
+### Advanced example:
 - Sync `Z:\Audio` to `E:\Audio`
 - Reorder file table on target (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
-- Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (only `*` and `**` are supported)
+- Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (`*` and `**` wildcards are supported)
 - Copy all MP3, WMA and AAC-LC files
 - Convert all other files to AAC-LC 192kbit/s
 - Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
