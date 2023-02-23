@@ -87,7 +87,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => GetUnixPath(x.Path!)), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -99,7 +99,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => GetUnixPath(x.Path!)), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -170,7 +170,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         public async Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
-            await _syncService.Push(path, (UnixFileMode)Convert.ToInt32("660", 8), modified ?? DateTimeOffset.Now, content, cancellationToken);
+            await _syncService.Push(path, content, modified ?? DateTimeOffset.Now, (UnixFileMode)Convert.ToInt32("660", 8), cancellationToken);
             var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
             var command = "am";
             var parms = new string[] { "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", fileUrl };
