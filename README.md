@@ -9,17 +9,17 @@ Works on Windows and Linux, macOS is untested.
 - exclude files/directories
 - use a local directory, MTP (Windows-only) or ADB as a target
 - convert unsupported files on-the-fly using FFMPEG
-    - decision by extension, container, codec, profile, ...
+    - detect file support by extension, container, codec, profile, ...
     - override codec settings for certain paths
 - fast conversion due to pipelining and multithreading
 - automatically embed album art from the directory into the file
-- handle unsupported characters in path and tags
-    - replace unsupported characters with a replacement list
-    - replace unsupported characters using Unicode compatibility normalization
-- handle m3u playlists by adjusting the file path or resolving the playlist to a directory with the playlist's songs
-- order the FAT32 file table (for embedded devices that don't sort directories before playing)
-- normalize directory/filename capitalization (for embedded devices that sort by ASCII code instead of (case-insensitive) letter)
-- handle limited directory depth (when set to 4: "One/Two/Three/Four/Five/Test.mp3" -> "One/Two/Three/Four_Five/Test.mp3")
+- handle miscellaneous device limitations (configurable)
+    - unsupported file formats/containers
+    - unsupported characters in path and tags
+    - resolve playlists to a directory with the playlist's songs
+    - sorting by FAT32 file table order
+    - case-sensitive sorting
+    - limited directory depth
 
 ## Installation
 ### Dependencies:
@@ -39,6 +39,7 @@ Windows:
 - ffmpeg: https://www.gyan.dev/ffmpeg/builds/
 - flac: https://ftp.osuosl.org/pub/xiph/releases/flac/ 
 - vorbis-tools: https://ftp.osuosl.org/pub/xiph/releases/vorbis/
+
 These have to be added to PATH manually.
 
 On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac vorbis-tools`).
@@ -162,8 +163,16 @@ If set, multiple tags (for example multiple artists) will be separated by this c
 #### NormalizeCase
 If `true`, makes the first character of each file/path name uppercase. Useful for devices that sort by ASCII code instead of (case-insensitive) letter.
 
+#### MaxDirectoryDepth
+If set, limits the directory depth to the specified value (when set to 4, `One/Two/Three/Four/Five/Test.mp3` becomes `One/Two/Three/Four_Five/Test.mp3`)
+
+
 ### PathFormatOverrides
-Use this to overwrite encoder settings depending on the directory that is being converted.
+Use this to overwrite encoder settings depending on the directory that is being converted. These overrides are based on the [FallbackFormat](#fallbackformat), unless the file already fits all limitations the overrides require.
+
+This can be useful for:
+- Setting different encoder settings for different types of media (like reducing channel count or bitrate for audio books)
+- Limiting maximum bitrate (just setting `MaxBitrate` means all media above this bitrate will be converted to the FallbackFormat bitrate or MaxBitrate, whichever is lower)
 
 ### WorkersRead/WorkersConvert/WorkersWrite
 The number of workers to use for each step.
@@ -172,7 +181,7 @@ The number of workers to use for each step.
 ### Minimal config:
 - Sync `Z:\Audio` to `E:\Audio`
 - Convert all files (regardless of current format) to 192kbit/s MP3
-- keep/embed album art as 320x320px JPEG
+- Keep/embed album art as 320x320px JPEG
 
 ```js
 {
