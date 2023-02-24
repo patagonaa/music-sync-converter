@@ -49,9 +49,12 @@
             "Codec": "libvorbis", // we could use opus here, but for some reason that makes album covers break
             "Muxer": "mp4",
             "Bitrate": 128,
-            "CoverCodec": "mjpeg",
-            "MaxCoverSize": 512,
             "Channels": 2
+        },
+        "AlbumArt": {
+            "Codec": "mjpeg",
+            "Width": 512,
+            "Height": 512
         },
         "ResolvePlaylists": false,
         "TagValueDelimiter": ";"

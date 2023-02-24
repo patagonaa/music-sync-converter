@@ -10,8 +10,6 @@
         public string Muxer { get; set; } = null!;
         public string? AdditionalFlags { get; set; }
         public int? Bitrate { get; set; }
-        public string? CoverCodec { get; set; }
-        public int? MaxCoverSize { get; set; }
 
         public EncoderInfo Clone()
         {

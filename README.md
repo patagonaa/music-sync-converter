@@ -20,6 +20,7 @@ Works on Windows and Linux, macOS is untested.
     - sorting by FAT32 file table order
     - case-sensitive sorting
     - limited directory depth
+    - album art stretching
 
 ## Installation
 ### Dependencies:
@@ -113,8 +114,6 @@ The fallback format includes:
 - `SampleRateHz`: Sample rate in Hz
 - `AdditionalFlags`: Additional parameters to pass to ffmpeg, for example `-movflags faststart`, which is required by a lot of players using the `mp4` or `ipod` muxer
 - `Bitrate`: Bitrate in kbit/s
-- `CoverCodec`: Format to use for album covers (`mjpeg` = jpg, `png` = png, `null` = remove album covers)
-- `MaxCoverSize`: Max. cover size in either axis
 
 "as required by ffmpeg" =>
 ```
@@ -122,7 +121,19 @@ ffmpeg -i input.mp3 -c:a aac -profile:a aac_low
            Encoder/Codec ^              ^ Profile (if applicable)
 ```
 
-##### Album covers
+#### AlbumArt (`null` = remove album covers)
+
+- `Codec`: Format to use for album covers (`mjpeg` = jpg, `png` = png)
+- `Width`: Cover size
+- `Height`: Cover size
+- `ResizeType`: Can be any of `None`, `KeepInputAspectRatio`, `ForceOutputAspectRatio`, `ForceOutputSize`
+    - `None`: Always keep original size
+    - `KeepInputAspectRatio` (default): Resize image to fit width and height while maintaining aspect ratio
+    - `ForceOutputAspectRatio`: Resize image to fit width and height and adds a border\* to match output aspect ratio (`Width`/`Height`). Useful for devices that stretch the album art to fit.
+    - `ForceOutputSize`: Resize image to exactly width and height and adds a border\* to match output aspect ratio
+
+\* border consists of a blurred version of the album cover
+
 If there are files named `cover.png`, `cover.jpg`, `folder.jpg`, in a song's directory, the album cover is added to the song (if the fallback format includes a cover codec).
 If there's already an album cover embedded in the file, that one will be preferred.
 
@@ -192,10 +203,13 @@ The number of workers to use for each step.
             "Extension": ".mp3",
             "Codec": "mp3", // as required by ffmpeg (-c:a aac)
             "Muxer": "mp3", // as required by ffmpeg (usually, this is the container format)
-            "Bitrate": 192, // kbit/s
-            "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
-            "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)
-        }
+            "Bitrate": 192 // kbit/s
+        },
+        "AlbumArt": {
+            "Codec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
+            "Width": 320, // maximum size of album covers
+            "Height": 320 // maximum size of album covers
+        },
     }
 }
 ```
@@ -206,7 +220,7 @@ The number of workers to use for each step.
 - Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (`*` and `**` wildcards are supported)
 - Copy all MP3, WMA and AAC-LC files
 - Convert all other files to AAC-LC 192kbit/s
-- Convert album covers to jpeg with 320x320 px max (while retaining aspect ratio)
+- Convert album covers to jpeg with 320x320 px max and add black borders to make them square
 - Replace unsupported characters in path names
 - Replace non-BMP characters in path names (characters that can't be represented with UCS-2) (required for Android devices)
 - Keep all characters in tags as they are
@@ -249,9 +263,13 @@ The number of workers to use for each step.
             "Profile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
             "Muxer": "ipod", // as required by ffmpeg (usually, this is the container format)
             "AdditionalFlags": "-movflags faststart", // additional arguments to pass to ffmpeg
-            "Bitrate": 192, // kbit/s
-            "CoverCodec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
-            "MaxCoverSize": 320 // maximum size of album covers in either axis (null = keep original size)
+            "Bitrate": 192 // kbit/s
+        },
+        "AlbumArt": {
+            "Codec": "mjpeg", // format to use for album covers ("mjpeg" = jpg, "png" = png, null = remove album covers)
+            "Width": 320, // maximum size of album covers
+            "Height": 320, // maximum size of album covers
+            "ResizeType": "ForceOutputAspectRatio" // for devices that stretch albumart to fit
         },
         "PathCharacterLimitations": { // omit this if your device supports unicode
             "SupportedChars": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-_ (),'[]!&", // all natively supported characters

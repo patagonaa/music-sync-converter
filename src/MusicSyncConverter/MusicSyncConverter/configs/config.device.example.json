@@ -50,9 +50,12 @@
             "AdditionalFlags": "-movflags faststart",
             "Bitrate": 192,
             "SampleRateHz": 44100,
-            "Channels": 2,
-            "CoverCodec": "mjpeg",
-            "MaxCoverSize": 320
+            "Channels": 2
+        },
+        "AlbumArt": {
+            "Codec": "mjpeg",
+            "Width": 320,
+            "Height": 320
         }
     }
 }

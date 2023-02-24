@@ -49,9 +49,7 @@
             "Extension": ".mp3",
             "Codec": "libmp3lame",
             "Muxer": "mp3",
-            "Bitrate": 192,
-            "CoverCodec": null,
-            "MaxCoverSize": null
+            "Bitrate": 192
         },
         "CharacterLimitations": {
             "SupportedChars": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}±´×ßЁАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяё",

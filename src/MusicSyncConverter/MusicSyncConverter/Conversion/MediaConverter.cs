@@ -70,11 +70,12 @@ namespace MusicSyncConverter.Conversion
             var hasAlbumArt = hasEmbeddedCover || albumArtPath != null;
 
             var encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension, config.DeviceConfig.FallbackFormat);
+            var albumArtInfo = config.DeviceConfig.AlbumArt;
 
             var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
-            if (!IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis) || (mergedOverrides != null && !IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)) || !AlbumArtIsSupported(encoderInfo, hasAlbumArt))
+            if (!IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis) || (mergedOverrides != null && !IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)) || !AlbumArtIsSupported(encoderInfo, albumArtInfo, hasAlbumArt))
             {
                 if (mergedOverrides != null)
                 {
@@ -86,13 +87,13 @@ namespace MusicSyncConverter.Conversion
                 }
             }
 
-            if (!AlbumArtIsSupported(encoderInfo, hasAlbumArt))
+            if (!AlbumArtIsSupported(encoderInfo, albumArtInfo, hasAlbumArt))
             {
                 _logger.LogWarning("FFMPEG does not support writing album art to ogg/opus files. Ignoring album art.");
-                encoderInfo.CoverCodec = null;
+                albumArtInfo = null;
             }
 
-            if(encoderInfo.Codec == "libvorbis" && audioStream.SampleRateHz > 48000)
+            if (encoderInfo.Codec == "libvorbis" && audioStream.SampleRateHz > 48000)
             {
                 encoderInfo.SampleRateHz = 48000;
             }
@@ -102,7 +103,7 @@ namespace MusicSyncConverter.Conversion
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(outputFile, encoderInfo.Extension));
 
             var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
-            await Convert(inputFile, hasEmbeddedCover, albumArtPath, outputFile, encoderInfo, ffmpegTags, cancellationToken);
+            await Convert(inputFile, hasEmbeddedCover, albumArtPath, outputFile, encoderInfo, albumArtInfo, ffmpegTags, cancellationToken);
 
             if (tagWriter != null)
                 await tagWriter.SetTags(tags, outputFile, cancellationToken);
@@ -110,9 +111,9 @@ namespace MusicSyncConverter.Conversion
             return (outputFile, encoderInfo.Extension);
         }
 
-        private bool AlbumArtIsSupported(EncoderInfo encoderInfo, bool hasAlbumArt)
+        private bool AlbumArtIsSupported(EncoderInfo encoderInfo, AlbumArtInfo? albumArtInfo, bool hasAlbumArt)
         {
-            var albumArtEnabled = encoderInfo.CoverCodec != null;
+            var albumArtEnabled = albumArtInfo?.Codec != null;
 
             if (!albumArtEnabled || !hasAlbumArt)
                 return true;
@@ -232,54 +233,42 @@ namespace MusicSyncConverter.Conversion
                     Codec = "copy",
                     Muxer = "ipod",
                     AdditionalFlags = "-movflags faststart",
-                    CoverCodec = fallbackFormat.CoverCodec,
-                    MaxCoverSize = fallbackFormat.MaxCoverSize,
                     Extension = sourceExtension
                 },
                 ".aac" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "adts",
-                    CoverCodec = null,
                     Extension = sourceExtension
                 },
                 ".wma" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "asf",
-                    CoverCodec = fallbackFormat.CoverCodec,
-                    MaxCoverSize = fallbackFormat.MaxCoverSize,
                     Extension = sourceExtension
                 },
                 ".ogg" or ".opus" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "ogg",
-                    CoverCodec = fallbackFormat.CoverCodec,
-                    MaxCoverSize = fallbackFormat.MaxCoverSize,
                     Extension = sourceExtension
                 },
                 ".mp3" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "mp3",
-                    CoverCodec = fallbackFormat.CoverCodec,
-                    MaxCoverSize = fallbackFormat.MaxCoverSize,
                     Extension = sourceExtension
                 },
                 ".flac" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "flac",
-                    CoverCodec = fallbackFormat.CoverCodec,
-                    MaxCoverSize = fallbackFormat.MaxCoverSize,
                     Extension = sourceExtension
                 },
                 ".wav" => new EncoderInfo
                 {
                     Codec = "copy",
                     Muxer = "wav",
-                    CoverCodec = null,
                     Extension = sourceExtension
                 },
                 _ => throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis.Format.FormatName})"),
@@ -344,12 +333,12 @@ namespace MusicSyncConverter.Conversion
                 (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate ?? mediaAnalysis.Format.BitRate) / 1000);
         }
 
-        private static async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
+        private static async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, string outFilePath, EncoderInfo encoderInfo, AlbumArtInfo? albumArtInfo, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
         {
             var args = new List<string>();
             args.AddRange(new[] { "-i", sourcePath });
 
-            var coverSupported = !string.IsNullOrEmpty(encoderInfo.CoverCodec);
+            var coverSupported = !string.IsNullOrEmpty(albumArtInfo?.Codec);
 
             var hasExternalCover = externalCoverPath != null;
             if (coverSupported && hasExternalCover)
@@ -417,12 +406,34 @@ namespace MusicSyncConverter.Conversion
                 }
             }
 
-            if (!string.IsNullOrEmpty(encoderInfo.CoverCodec))
+            if (albumArtInfo?.Codec != null && (hasEmbeddedCover || hasExternalCover))
             {
-                args.AddRange(new[] { "-c:v", encoderInfo.CoverCodec });
-                if (encoderInfo.MaxCoverSize != null)
+                args.AddRange(new[] { "-c:v", albumArtInfo.Codec });
+
+                if (albumArtInfo.ResizeType != ImageResizeType.None)
                 {
-                    args.AddRange(new[] { "-vf", $"scale='min({encoderInfo.MaxCoverSize.Value},iw)':min'({encoderInfo.MaxCoverSize.Value},ih)':force_original_aspect_ratio=decrease" });
+                    var width = albumArtInfo.Width ?? throw new ArgumentException("AlbumArt config must have width and height when a resize type is set");
+                    var height = albumArtInfo.Height ?? throw new ArgumentException("AlbumArt config must have width and height when a resize type is set");
+
+                    switch (albumArtInfo.ResizeType)
+                    {
+                        case ImageResizeType.KeepInputAspectRatio:
+                            args.AddRange(new[] { "-vf", $"scale='min({width},iw)':min'({height},ih)':force_original_aspect_ratio=decrease" });
+                            break;
+                        case ImageResizeType.ForceOutputAspectRatio:
+                            args.AddRange(new[] { "-vf", $"scale='min({width},iw)':'min({height},ih)':force_original_aspect_ratio=decrease,split [original][copy]; " + // fit the image into the target image size; split
+                                $"[copy]scale='if(gt(a,{width}/{height}),iw,ih*({width}/{height}))':'if(gt(a,{width}/{height}),iw/({width}/{height}),ih)',gblur=sigma=10[blurred]; " + // stretch the image to the target aspect ratio without scaling it up; blur
+                                $"[blurred][original]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2" }); // overlay the scaled image centered over the blurred image
+                            break;
+                        case ImageResizeType.ForceOutputSize:
+                            args.AddRange(new[] { "-vf", $"split [original][copy]; " +
+                                $"[copy]scale={width}:{height},gblur=sigma=10[blurred]; " + // stretch the image to the target size; blur
+                                $"[original]scale={width}:{height}:force_original_aspect_ratio=decrease[scaled]; " + // fit the image into the target image size
+                                $"[blurred][scaled]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2" }); // overlay the scaled image centered over the blurred image
+                            break;
+                        default:
+                            throw new IndexOutOfRangeException($"Invalid CropType {albumArtInfo.ResizeType}");
+                    }
                 }
             }
             else

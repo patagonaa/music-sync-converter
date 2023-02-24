@@ -16,9 +16,17 @@
             "Codec": "libmp3lame",
             "Muxer": "mp3",
             "Bitrate": 192,
-            "CoverCodec": "mjpeg",
-            "MaxCoverSize": 512,
             "Channels": 2
+        },
+        "AlbumArt": {
+            "Codec": "mjpeg",
+            // this stupid car radio doesn't seem to be able to display pixels 1:1.
+            // the actual resolution (determined by counting pixels) seems to be 197x210px, however no combination of [180-220]x[180-220] seems to be displayed pixel-perfect.
+            // also, all album art is stretched to fit, regardless of the aspect ratio.
+            // so, I'm ignoring the actual pixel size and putting a square aspect ratio here so square covers look good (even if they may be stretched by a few pixels)
+            "Width": 200,
+            "Height": 200,
+            "ResizeType": "ForceOutputAspectRatio"
         },
         "CharacterLimitations": {
             "SupportedChars": "ɐɑɓɔɖɗəɛɠɡɣɨɩɯɲɵʀʃʈʉʊʋʌʒ ←↑→↓↔↕↖↗↘↙↸↹⇧ ★☆☉♀♁♂♭♯ 　、。〃〄々〆〇〈〉《》「」『』【】〒〓〔〕〖〗〝〞〟〡〢〣〤〥〦〧〨〩〨〩〾",
