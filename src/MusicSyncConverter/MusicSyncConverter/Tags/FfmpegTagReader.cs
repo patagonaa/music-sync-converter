@@ -29,7 +29,7 @@ namespace MusicSyncConverter.Tags
             return Task.FromResult<IReadOnlyList<KeyValuePair<string, string>>>(toReturn.ToList());
         }
 
-        public bool CanHandle(string fileName, string fileExtension)
+        public bool CanHandle(string fileExtension)
         {
             return true;
         }

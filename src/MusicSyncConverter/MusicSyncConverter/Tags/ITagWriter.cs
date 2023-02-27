@@ -11,7 +11,7 @@ namespace MusicSyncConverter.Tags
         /// </summary>
         /// <param name="tags">The tags in Vorbis Comment format</param>
         /// <param name="fileName">the file to set</param>
-        Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, string fileName, CancellationToken cancellationToken);
-        bool CanHandle(string fileName, string fileExtension);
+        Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken);
+        bool CanHandle(string fileExtension);
     }
 }

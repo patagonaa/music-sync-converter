@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,7 +32,24 @@ namespace MusicSyncConverter.Tags
                 throw new Exception($"metaflac exit code {process.ExitCode}");
         }
 
-        protected override async Task ImportSafeTags(IReadOnlyList<KeyValuePair<string, string>> tags, bool overwrite, string fileName, CancellationToken cancellationToken)
+        public override async Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken)
+        {
+            IReadOnlyList<KeyValuePair<string, string>> tagsToWrite = tags
+                .Concat(albumArt.Select(x => new KeyValuePair<string, string>("METADATA_BLOCK_PICTURE", Convert.ToBase64String(GetMetadataBlockPicture(x)))))
+                .ToList();
+
+            var unsafeChars = new char[] { '\r', '\n' };
+            var safeTags = tagsToWrite.Where(tag => !unsafeChars.Any(unsafeChar => tag.Value.Contains(unsafeChar))).ToList();
+            var unsafeTags = tags.Except(safeTags).ToList();
+            await ImportSafeTags(safeTags, true, fileName, cancellationToken);
+
+            foreach (var tag in unsafeTags)
+            {
+                await ImportUnsafeTag(tag, fileName, cancellationToken);
+            }
+        }
+
+        protected async Task ImportSafeTags(IReadOnlyList<KeyValuePair<string, string>> tags, bool overwrite, string fileName, CancellationToken cancellationToken)
         {
             string tagsFile = _tempFileSession.GetTempFilePath();
             using (var sw = new StreamWriter(tagsFile, false, new UTF8Encoding(false)) { NewLine = "\n" })
@@ -57,7 +75,7 @@ namespace MusicSyncConverter.Tags
                 throw new Exception($"metaflac exit code {process.ExitCode}");
         }
 
-        protected override async Task ImportUnsafeTag(KeyValuePair<string, string> tag, string fileName, CancellationToken cancellationToken)
+        protected async Task ImportUnsafeTag(KeyValuePair<string, string> tag, string fileName, CancellationToken cancellationToken)
         {
             var tagFile = _tempFileSession.GetTempFilePath();
             await File.WriteAllTextAsync(tagFile, tag.Value.ReplaceLineEndings(), new UTF8Encoding(false), cancellationToken);
@@ -67,7 +85,7 @@ namespace MusicSyncConverter.Tags
                 throw new Exception($"metaflac exit code {process.ExitCode}");
         }
 
-        public override bool CanHandle(string fileName, string fileExtension)
+        public override bool CanHandle(string fileExtension)
         {
             return _hasMetaFlac && fileExtension.Equals(".flac", StringComparison.OrdinalIgnoreCase);
         }
@@ -76,7 +94,7 @@ namespace MusicSyncConverter.Tags
         {
             try
             {
-                Process.Start("metaflac", "--version").WaitForExit();
+                ProcessStartHelper.RunProcess("metaflac", new[] { "--version" }).Wait();
                 return true;
             }
             catch (Win32Exception)

@@ -15,6 +15,6 @@ namespace MusicSyncConverter.Tags
         /// <param name="fileExtension">the file's original extension</param>
         /// <returns>the files' tags in Vorbis Comment format</returns>
         Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(FfProbeResult mediaAnalysis, string fileName, string fileExtension, CancellationToken cancellationToken);
-        bool CanHandle(string fileName, string fileExtension);
+        bool CanHandle(string fileExtension);
     }
 }

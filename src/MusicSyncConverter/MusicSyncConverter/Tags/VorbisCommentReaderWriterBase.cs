@@ -1,8 +1,8 @@
 ﻿using MusicSyncConverter.Conversion.Ffmpeg;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -76,21 +76,56 @@ namespace MusicSyncConverter.Tags
             return await sr.ReadLineAsync();
         }
 
-        public async Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, string fileName, CancellationToken cancellationToken)
+        protected static byte[] GetMetadataBlockPicture(AlbumArt albumArt)
         {
-            var unsafeChars = new char[] { '\r', '\n' };
-            var safeTags = tags.Where(tag => !unsafeChars.Any(unsafeChar => tag.Value.Contains(unsafeChar))).ToList();
-            var unsafeTags = tags.Except(safeTags).ToList();
-            await ImportSafeTags(safeTags, true, fileName, cancellationToken);
+            var toReturn = new byte[8 + albumArt.MimeType.Length + 4 + (albumArt.Description?.Length ?? 0) + 20 + albumArt.PictureData.Length];
+            var span = toReturn.AsSpan();
 
-            foreach (var tag in unsafeTags)
+            var i = 0;
+
+            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)albumArt.Type);
+            i += 4;
+
+            var mimeTypeBytes = Encoding.ASCII.GetBytes(albumArt.MimeType);
+            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)mimeTypeBytes.Length);
+            i += 4;
+
+            Array.Copy(mimeTypeBytes, 0, toReturn, i, mimeTypeBytes.Length);
+            i += mimeTypeBytes.Length;
+
+            if (albumArt.Description != null)
             {
-                await ImportUnsafeTag(tag, fileName, cancellationToken);
+                var descriptionBytes = Encoding.UTF8.GetBytes(albumArt.Description);
+                BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)descriptionBytes.Length);
+                i += 4;
+
+                Array.Copy(descriptionBytes, 0, toReturn, i, descriptionBytes.Length);
+                i += descriptionBytes.Length;
             }
+            else
+            {
+                i += 4; // description length
+            }
+
+            i += 4; // width = 0 (ignore)
+            i += 4; // height = 0 (ignore)
+            i += 4; // color depth = 0 (ignore)
+            i += 4; // color count = 0 (ignore)
+
+            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)albumArt.PictureData.Length);
+            i += 4;
+            Array.Copy(albumArt.PictureData, 0, toReturn, i, albumArt.PictureData.Length);
+            i += albumArt.PictureData.Length;
+
+            if (i != toReturn.Length)
+            {
+                throw new InvalidOperationException("Wrong MetaData Length");
+            }
+
+            return toReturn;
         }
         protected abstract Task ExportTags(string tagFile, string fileName, CancellationToken cancellationToken);
-        protected abstract Task ImportSafeTags(IReadOnlyList<KeyValuePair<string, string>> tags, bool overwrite, string fileName, CancellationToken cancellationToken);
-        protected abstract Task ImportUnsafeTag(KeyValuePair<string, string> tag, string fileName, CancellationToken cancellationToken);
-        public abstract bool CanHandle(string fileName, string fileExtension);
+        public abstract bool CanHandle(string fileExtension);
+        public abstract Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken);
     }
 }

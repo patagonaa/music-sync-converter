@@ -7,7 +7,7 @@ namespace MusicSyncConverter.Config
     {
         public IList<FileFormatLimitation> SupportedFormats { get; set; } = null!;
         public EncoderInfo FallbackFormat { get; set; } = null!;
-        public AlbumArtInfo? AlbumArt { get; set; }
+        public AlbumArtConfig? AlbumArt { get; set; }
         public CharacterLimitations? CharacterLimitations
         {
             get

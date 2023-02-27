@@ -1,6 +1,6 @@
 ﻿namespace MusicSyncConverter.Config
 {
-    public class AlbumArtInfo
+    public class AlbumArtConfig
     {
         public string? Codec { get; set; }
         public int? Width { get; set; }
