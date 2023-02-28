@@ -30,7 +30,6 @@ Works on Windows and Linux, macOS is untested.
 - optional
     - adb (for sync to Android devices via adb)
     - flac (including metaflac) to handle flac files with multiple tag values correctly
-    - vorbis-tools (including vorbiscomment) to handle ogg / opus files with multiple tag values and album art correctly
 
 All of these should be installed so they are are in PATH.
 
@@ -39,11 +38,10 @@ All of these should be installed so they are are in PATH.
 Windows:
 - ffmpeg: https://www.gyan.dev/ffmpeg/builds/
 - flac: https://ftp.osuosl.org/pub/xiph/releases/flac/ 
-- vorbis-tools: https://github.com/Chocobo1/vorbis-tools_win32-build/releases
 
 These have to be added to PATH manually.
 
-On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac vorbis-tools`).
+On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac`).
 
 ## Usage:
 `dotnet run --project src\MusicSyncConverter\MusicSyncConverter -- config.json`
