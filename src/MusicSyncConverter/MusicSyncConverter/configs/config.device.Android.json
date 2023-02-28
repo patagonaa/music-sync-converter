@@ -45,8 +45,8 @@
             }
         ],
         "FallbackFormat": {
-            "Extension": ".ogg",
-            "Codec": "libvorbis", // we could use opus here, but for some reason that makes album covers break
+            "Extension": ".opus",
+            "Codec": "libopus",
             "Muxer": "ogg",
             "Bitrate": 128,
             "Channels": 2
