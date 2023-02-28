@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -28,10 +27,7 @@ namespace MusicSyncConverter.Tags
 
         protected override async Task ExportTags(string tagFile, string fileName, CancellationToken cancellationToken)
         {
-            var process = Process.Start("vorbiscomment", new string[] { "--raw", "--list", "--commentfile", tagFile, fileName });
-            await process.WaitForExitAsync(cancellationToken);
-            if (process.ExitCode != 0)
-                throw new Exception($"vorbiscomment exit code {process.ExitCode}");
+            await ProcessStartHelper.RunProcess("vorbiscomment", new string[] { "--raw", "--list", "--commentfile", tagFile, fileName }, cancellationToken: cancellationToken);
         }
 
         public override async Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken)
@@ -50,10 +46,8 @@ namespace MusicSyncConverter.Tags
                     await sw.WriteLineAsync($"{tag.Key}={tag.Value}");
                 }
             }
-            var process = Process.Start("vorbiscomment", new string[] { "--raw", "--escapes", "--write", "--commentfile", tagsFile, fileName });
-            await process.WaitForExitAsync(cancellationToken);
-            if (process.ExitCode != 0)
-                throw new Exception($"vorbiscomment exit code {process.ExitCode}");
+
+            await ProcessStartHelper.RunProcess("vorbiscomment", new string[] { "--raw", "--escapes", "--write", "--commentfile", tagsFile, fileName }, cancellationToken: cancellationToken);
         }
 
         private static string EscapeUnsafeChars(string x)

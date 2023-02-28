@@ -32,7 +32,9 @@ namespace MusicSyncConverter
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            using (cancellationToken.Register(() => cancelAction?.Invoke(process)))
+            using (var forceKillCts = new CancellationTokenSource())
+            using (cancellationToken.Register(() => { forceKillCts.CancelAfter(10000); cancelAction?.Invoke(process); }))
+            using (forceKillCts.Token.Register(() => { process.Kill(); }))
             {
                 process.Start();
                 process.BeginOutputReadLine();
