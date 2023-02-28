@@ -13,7 +13,7 @@ namespace MusicSyncConverter.Tags
     internal abstract class VorbisCommentReaderWriterBase : ITagReader, ITagWriter
     {
         protected readonly ITempFileSession _tempFileSession;
-        private readonly Regex _keyValueRegex = new Regex("^([a-zA-Z ]+)=(.+)$");
+        private readonly Regex _keyValueRegex = new Regex("^([^=\n\r]+)=(.*)$");
 
         public VorbisCommentReaderWriterBase(ITempFileSession tempFileSession)
         {
@@ -37,7 +37,10 @@ namespace MusicSyncConverter.Tags
                     var match = _keyValueRegex.Match(line);
                     if (match.Success)
                     {
-                        tags.Add(new KeyValuePair<string, string>(match.Groups[1].Value.ToUpperInvariant(), match.Groups[2].Value));
+                        string key = match.Groups[1].Value.ToUpperInvariant();
+                        if (key == "METADATA_BLOCK_PICTURE")
+                            continue;
+                        tags.Add(new KeyValuePair<string, string>(key, match.Groups[2].Value));
                     }
                     else
                     {
