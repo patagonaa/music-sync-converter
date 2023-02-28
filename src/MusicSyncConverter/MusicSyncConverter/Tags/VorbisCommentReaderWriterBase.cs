@@ -79,54 +79,6 @@ namespace MusicSyncConverter.Tags
             return await sr.ReadLineAsync();
         }
 
-        protected static byte[] GetMetadataBlockPicture(AlbumArt albumArt)
-        {
-            var toReturn = new byte[8 + albumArt.MimeType.Length + 4 + (albumArt.Description?.Length ?? 0) + 20 + albumArt.PictureData.Length];
-            var span = toReturn.AsSpan();
-
-            var i = 0;
-
-            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)albumArt.Type);
-            i += 4;
-
-            var mimeTypeBytes = Encoding.ASCII.GetBytes(albumArt.MimeType);
-            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)mimeTypeBytes.Length);
-            i += 4;
-
-            Array.Copy(mimeTypeBytes, 0, toReturn, i, mimeTypeBytes.Length);
-            i += mimeTypeBytes.Length;
-
-            if (albumArt.Description != null)
-            {
-                var descriptionBytes = Encoding.UTF8.GetBytes(albumArt.Description);
-                BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)descriptionBytes.Length);
-                i += 4;
-
-                Array.Copy(descriptionBytes, 0, toReturn, i, descriptionBytes.Length);
-                i += descriptionBytes.Length;
-            }
-            else
-            {
-                i += 4; // description length
-            }
-
-            i += 4; // width = 0 (ignore)
-            i += 4; // height = 0 (ignore)
-            i += 4; // color depth = 0 (ignore)
-            i += 4; // color count = 0 (ignore)
-
-            BinaryPrimitives.WriteUInt32BigEndian(span[i..], (uint)albumArt.PictureData.Length);
-            i += 4;
-            Array.Copy(albumArt.PictureData, 0, toReturn, i, albumArt.PictureData.Length);
-            i += albumArt.PictureData.Length;
-
-            if (i != toReturn.Length)
-            {
-                throw new InvalidOperationException("Wrong MetaData Length");
-            }
-
-            return toReturn;
-        }
         protected abstract Task ExportTags(string tagFile, string fileName, CancellationToken cancellationToken);
         public abstract bool CanHandle(string fileExtension);
         public abstract Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken);

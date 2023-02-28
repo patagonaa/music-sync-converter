@@ -3,10 +3,11 @@ using MusicSyncConverter.Config;
 using MusicSyncConverter.Conversion.Ffmpeg;
 using MusicSyncConverter.Tags;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +30,8 @@ namespace MusicSyncConverter.Conversion
             _sanitizer = new TextSanitizer();
             _pathMatcher = new PathMatcher();
             _tagReaders = new List<ITagReader> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
-            _tagWriters = new List<ITagWriter> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
+            // writing large files with vorbiscomment is really, really slow so we accept not being able to write duplicate keys correctly
+            _tagWriters = new List<ITagWriter> { new MetaFlacReaderWriter(tempFileSession), /* new VorbisCommentReaderWriter(tempFileSession) */ };
             _ffmpegTagReader = new FfmpegTagReader(logger);
             _ffmpegTagMapper = new FfmpegTagMapper(logger);
             _tempFileSession = tempFileSession;
@@ -95,15 +97,11 @@ namespace MusicSyncConverter.Conversion
             var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(encoderInfo.Extension));
 
             var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
-            var (outputFile, albumArtToEmbed) = await Convert(inputFile, hasEmbeddedCover, albumArtPath, encoderInfo, albumArtConfig, ffmpegTags, cancellationToken);
+            var outputFile = await Convert(inputFile, hasEmbeddedCover, albumArtPath, encoderInfo, albumArtConfig, ffmpegTags, cancellationToken);
 
             if (tagWriter != null)
             {
-                await tagWriter.SetTags(tags, albumArtToEmbed != null ? new[] { albumArtToEmbed.Value } : Array.Empty<AlbumArt>(), outputFile, cancellationToken);
-            }
-            else if (albumArtToEmbed != null)
-            {
-                _logger.LogWarning("Couldn't embed album art in output file. This is likely due to FFMPEG not being able to write album art to ogg files. Install vorbis-tools to fix this.");
+                await tagWriter.SetTags(tags, Array.Empty<AlbumArt>(), outputFile, cancellationToken);
             }
 
             return (outputFile, encoderInfo.Extension);
@@ -327,7 +325,7 @@ namespace MusicSyncConverter.Conversion
             };
         }
 
-        private async Task<(string OutFile, AlbumArt? AlbumArtToEmbed)> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, EncoderInfo encoderInfo, AlbumArtConfig? albumArtConfig, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
+        private async Task<string> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, EncoderInfo encoderInfo, AlbumArtConfig? albumArtConfig, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
         {
             var args = new List<string>();
             args.AddRange(new[] { "-i", sourcePath });
@@ -435,33 +433,22 @@ namespace MusicSyncConverter.Conversion
                 args.AddRange(new[] { "-vn" });
             }
 
-            var ffmpegCanEmbed = encoderInfo.Muxer != "ogg"; // https://trac.ffmpeg.org/ticket/4448
+            var oggHackRequired = albumArtOutput != null && encoderInfo.Muxer == "ogg"; // https://trac.ffmpeg.org/ticket/4448
 
-            var outFilePath = _tempFileSession.GetTempFilePath();
-            string? albumArtPath = null;
-            string? albumArtMimeType = null;
-            if (albumArtOutput == null)
+            if (oggHackRequired)
             {
-                args.AddRange(new[] { "-f", encoderInfo.Muxer });
-                args.Add(outFilePath);
-            }
-            else if (ffmpegCanEmbed)
-            {
-                args.AddRange(new[] { "-map", albumArtOutput });
-                args.AddRange(new[] { "-disposition:v", "attached_pic", "-metadata:s:v", "comment=Cover (front)" });
-                args.AddRange(new[] { "-c:v", albumArtConfig!.Codec! });
-                args.AddRange(new[] { "-f", encoderInfo.Muxer });
-                args.Add(outFilePath);
-            }
-            else
-            {
-                args.AddRange(new[] { "-f", encoderInfo.Muxer });
-                args.Add(outFilePath);
+                // if we have album art and the muxer is ogg, we output the audio and cover seperately and merge the two later.
 
-                args.AddRange(new[] { "-map", albumArtOutput });
+                // generate audio and album art files
+                var audioFilePath = _tempFileSession.GetTempFilePath();
+                var albumArtPath = _tempFileSession.GetTempFilePath();
 
+                args.AddRange(new[] { "-f", encoderInfo.Muxer });
+                args.Add(audioFilePath);
 
-                (var muxer, albumArtMimeType) = albumArtConfig!.Codec! switch
+                args.AddRange(new[] { "-map", albumArtOutput! });
+
+                var (muxer, albumArtMimeType) = albumArtConfig!.Codec! switch
                 {
                     "mjpeg" => ("image2", "image/jpeg"),
                     "png" => ("image2", "image/png"),
@@ -471,20 +458,40 @@ namespace MusicSyncConverter.Conversion
                 args.AddRange(new[] { "-c:v", albumArtConfig!.Codec! });
                 args.AddRange(new[] { "-f", muxer });
 
-                albumArtPath = _tempFileSession.GetTempFilePath();
                 args.Add(albumArtPath);
+
+                await ProcessStartHelper.RunProcess("ffmpeg", args, null, null, process => process.StandardInput.Write('q'), cancellationToken: cancellationToken);
+
+                // merge the two
+                var mergedFilePath = _tempFileSession.GetTempFilePath();
+
+                var albumArt = new AlbumArt(ApicType.CoverFront, albumArtMimeType!, null, await File.ReadAllBytesAsync(albumArtPath, cancellationToken));
+                var metadataFile = _tempFileSession.GetTempFilePath();
+                await File.WriteAllTextAsync(metadataFile, $";FFMETADATA1\nMETADATA_BLOCK_PICTURE={albumArt.ToVorbisMetaDataBlockPicture()}\n", cancellationToken);
+
+                await ProcessStartHelper.RunProcess("ffmpeg", new[] { "-i", audioFilePath, "-i", metadataFile, "-map_metadata", "0", "-map_metadata", "1", "-c:a", "copy", "-f", encoderInfo.Muxer, mergedFilePath }, null, null, process => process.StandardInput.Write('q'), cancellationToken: cancellationToken);
+
+                return mergedFilePath;
+            }
+
+            var outFilePath = _tempFileSession.GetTempFilePath();
+            if (albumArtOutput == null)
+            {
+                args.AddRange(new[] { "-f", encoderInfo.Muxer });
+                args.Add(outFilePath);
+            }
+            else
+            {
+                args.AddRange(new[] { "-map", albumArtOutput });
+                args.AddRange(new[] { "-disposition:v", "attached_pic", "-metadata:s:v", "comment=Cover (front)" });
+                args.AddRange(new[] { "-c:v", albumArtConfig!.Codec! });
+                args.AddRange(new[] { "-f", encoderInfo.Muxer });
+                args.Add(outFilePath);
             }
 
             await ProcessStartHelper.RunProcess("ffmpeg", args, null, null, process => process.StandardInput.Write('q'), cancellationToken: cancellationToken);
 
-            if (albumArtPath != null)
-            {
-                return (outFilePath, new AlbumArt(ApicType.CoverFront, albumArtMimeType!, null, await File.ReadAllBytesAsync(albumArtPath, cancellationToken)));
-            }
-            else
-            {
-                return (outFilePath, null);
-            }
+            return outFilePath;
         }
     }
 }
