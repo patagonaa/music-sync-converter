@@ -308,11 +308,23 @@ namespace MusicSyncConverter.Conversion
             var audioStream = mediaAnalysis.Streams.Single(x => x.CodecType == FfProbeCodecType.Audio);
 
             return (limitation.Extension == null || limitation.Extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase)) &&
-                (limitation.Codec == null || limitation.Codec.Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) &&
+                (limitation.Codec == null || EncoderToCodec(limitation.Codec).Equals(audioStream.CodecName, StringComparison.OrdinalIgnoreCase)) && // we're kinda mixing codec vs. encoder here, but it works for now
                 (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
                 (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
                 (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
                 (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate ?? mediaAnalysis.Format.BitRate) / 1000);
+        }
+
+        private static string EncoderToCodec(string encoder)
+        {
+            return encoder switch
+            {
+                "libfdk_aac" => "aac",
+                "libopus" => "opus",
+                "libvorbis" => "vorbis",
+                "libmp3lame" => "mp3",
+                _ => encoder
+            };
         }
 
         private async Task<(string OutFile, AlbumArt? AlbumArtToEmbed)> Convert(string sourcePath, bool hasEmbeddedCover, string? externalCoverPath, EncoderInfo encoderInfo, AlbumArtConfig? albumArtConfig, IReadOnlyDictionary<string, string>? tags, CancellationToken cancellationToken)
