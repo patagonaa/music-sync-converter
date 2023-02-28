@@ -140,9 +140,17 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         {
             var path = GetUnixPath(subpath);
 
-            var stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
-            if (stat.Mode == 0)
-                return null;
+            StatV2Entry stat;
+            try
+            {
+                stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
+            }
+            catch (AdbSyncException ex)
+            {
+                if (ex.ErrorCode == AdbSyncErrorCode.ENOENT)
+                    return null;
+                throw;
+            }
             return MapToFileInfo(stat, subpath);
         }
 
