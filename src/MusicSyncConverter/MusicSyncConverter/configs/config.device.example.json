@@ -47,7 +47,6 @@
             "Codec": "aac",
             "Profile": "aac_low",
             "Muxer": "ipod",
-            "AdditionalFlags": "-movflags faststart",
             "Bitrate": 192,
             "SampleRateHz": 44100,
             "Channels": 2

@@ -113,7 +113,7 @@ The fallback format includes:
 - `Profile`: Profile as required by ffmpeg
 - `Channels`: Number of audio channels
 - `SampleRateHz`: Sample rate in Hz
-- `AdditionalFlags`: Additional parameters to pass to ffmpeg, for example `-movflags faststart`, which is required by a lot of players using the `mp4` or `ipod` muxer
+- `AdditionalFlags`: Additional parameters to pass to ffmpeg
 - `Bitrate`: Bitrate in kbit/s
 
 "as required by ffmpeg" =>
@@ -277,7 +277,6 @@ Run using `dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- con
             "Codec": "aac", // as required by ffmpeg (-c:a aac)
             "Profile": "aac_low", // as required by ffmpeg (-profile:a aac_low), may be omitted
             "Muxer": "ipod", // as required by ffmpeg (usually, this is the container format)
-            "AdditionalFlags": "-movflags faststart", // additional arguments to pass to ffmpeg
             "Bitrate": 192 // kbit/s
         },
         "AlbumArt": {

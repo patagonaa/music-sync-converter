@@ -125,7 +125,7 @@ namespace MusicSyncConverter.Conversion
             return JsonSerializer.Deserialize<FfProbeResult>(stdout.ToString()) ?? throw new ArgumentException("ffprobe result was null");
         }
 
-        private IReadOnlyList<KeyValuePair<string, string>> FilterTags(IReadOnlyList<KeyValuePair<string, string>> tags)
+        private static IReadOnlyList<KeyValuePair<string, string>> FilterTags(IReadOnlyList<KeyValuePair<string, string>> tags)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
             foreach (var tag in tags)
@@ -142,7 +142,7 @@ namespace MusicSyncConverter.Conversion
             return toReturn;
         }
 
-        private EncoderInfo GetEncoderInfoOverride(EncoderInfo fallbackFormat, FileFormatOverride toApply)
+        private static EncoderInfo GetEncoderInfoOverride(EncoderInfo fallbackFormat, FileFormatOverride toApply)
         {
             var toReturn = fallbackFormat.Clone();
             if (toApply.Extension != null && toApply.Extension != toReturn.Extension)
@@ -174,7 +174,7 @@ namespace MusicSyncConverter.Conversion
             return toReturn;
         }
 
-        private FileFormatOverride MergeOverrides(IReadOnlyList<FileFormatOverride> overrides)
+        private static FileFormatOverride MergeOverrides(IReadOnlyList<FileFormatOverride> overrides)
         {
             var toReturn = overrides[0].Clone();
 
@@ -214,7 +214,6 @@ namespace MusicSyncConverter.Conversion
                 {
                     Codec = "copy",
                     Muxer = "ipod",
-                    AdditionalFlags = "-movflags faststart",
                     Extension = sourceExtension
                 },
                 ".aac" => new EncoderInfo
@@ -279,7 +278,7 @@ namespace MusicSyncConverter.Conversion
             return toReturn;
         }
 
-        private string FormatLogValue(string value)
+        private static string FormatLogValue(string value)
         {
             if (value.Contains('\n'))
             {
@@ -291,7 +290,7 @@ namespace MusicSyncConverter.Conversion
             }
         }
 
-        private bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, FfProbeResult mediaAnalysis)
+        private static bool IsSupported(IList<FileFormatLimitation> supportedFormats, string sourceExtension, FfProbeResult mediaAnalysis)
         {
             foreach (var supportedFormat in supportedFormats)
             {
@@ -341,7 +340,7 @@ namespace MusicSyncConverter.Conversion
                 }
                 else if (externalCoverPath != null)
                 {
-                    args.AddRange(new[] { "-i", externalCoverPath! });
+                    args.AddRange(new[] { "-i", externalCoverPath });
                     albumArtInput = "1:v";
                 }
             }
@@ -442,9 +441,15 @@ namespace MusicSyncConverter.Conversion
         private static IEnumerable<string> GetOutFileArgs(EncoderInfo encoderInfo, IReadOnlyDictionary<string, string>? tags, string outputFile)
         {
             var args = new List<string>();
+
             if (encoderInfo.Muxer == "mp3")
             {
                 args.AddRange(new[] { "-id3v2_version", "3" });
+            }
+
+            if (encoderInfo.Muxer == "ipod")
+            {
+                args.AddRange(new[] { "-movflags", "faststart" });
             }
 
             if (tags != null)
