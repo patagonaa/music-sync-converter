@@ -371,13 +371,13 @@ namespace MusicSyncConverter.Conversion
                 // if we have album art and the muxer is ogg, we output the audio and cover seperately and merge the two later.
 
                 // configure audio file output
-                var audioFilePath = _tempFileSession.GetTempFilePath();
+                var audioFilePath = _tempFileSession.GetTempFilePath(".nut");
 
                 args.AddRange(new[] { "-f", "nut" });
                 args.Add(audioFilePath);
 
                 // configure album art file output
-                var albumArtPath = _tempFileSession.GetTempFilePath();
+                var albumArtPath = _tempFileSession.GetTempFilePath(albumArtConfig.Codec switch { "mjpeg" => ".jpg", "png" => ".png", _ => ".tmp" });
                 args.AddRange(new[] { "-map", albumArtOutput });
                 args.AddRange(GetAlbumArtCodecArgs(albumArtConfig));
                 var albumArtFileMuxer = albumArtConfig.Codec switch
@@ -394,7 +394,7 @@ namespace MusicSyncConverter.Conversion
                 await ProcessStartHelper.RunProcess("ffmpeg", args, null, null, process => process.StandardInput.Write('q'), cancellationToken: cancellationToken);
 
                 // configure and run ffmpeg a second time to merge the two files
-                var mergedFilePath = _tempFileSession.GetTempFilePath();
+                var mergedFilePath = _tempFileSession.GetTempFilePath(encoderInfo.Extension);
 
                 var albumArtMimeType = albumArtConfig.Codec switch
                 {
@@ -403,7 +403,8 @@ namespace MusicSyncConverter.Conversion
                     _ => throw new NotSupportedException($"Unsupported album art codec {albumArtConfig.Codec}"),
                 };
                 var albumArt = new AlbumArt(ApicType.CoverFront, albumArtMimeType, null, await File.ReadAllBytesAsync(albumArtPath, cancellationToken));
-                var metadataFile = _tempFileSession.GetTempFilePath();
+                File.Delete(albumArtPath);
+                var metadataFile = _tempFileSession.GetTempFilePath(".txt");
                 await File.WriteAllTextAsync(metadataFile, $";FFMETADATA1\nMETADATA_BLOCK_PICTURE={albumArt.ToVorbisMetaDataBlockPicture()}\n", cancellationToken);
 
                 var remuxArgs = new List<string>
@@ -417,6 +418,8 @@ namespace MusicSyncConverter.Conversion
 
                 await ProcessStartHelper.RunProcess("ffmpeg", remuxArgs, null, null, process => process.StandardInput.Write('q'), cancellationToken: cancellationToken);
 
+                File.Delete(audioFilePath);
+                File.Delete(metadataFile);
                 return mergedFilePath;
             }
 
@@ -427,7 +430,7 @@ namespace MusicSyncConverter.Conversion
                 args.AddRange(new[] { "-disposition:v", "attached_pic", "-metadata:s:v", "comment=Cover (front)" });
             }
 
-            var outFilePath = _tempFileSession.GetTempFilePath();
+            var outFilePath = _tempFileSession.GetTempFilePath(encoderInfo.Extension);
 
             args.AddRange(GetOutFileArgs(encoderInfo, tags, outFilePath));
 

@@ -48,14 +48,14 @@ namespace MusicSyncConverter
                 _sessionPath = sessionPath;
             }
 
-            public string GetTempFilePath()
+            public string GetTempFilePath(string extension = ".tmp")
             {
-                return Path.Combine(_sessionPath, $"{Guid.NewGuid():D}.tmp");
+                return Path.Combine(_sessionPath, Path.ChangeExtension(Guid.NewGuid().ToString("D"), extension));
             }
 
-            public async Task<(string path, long length)> CopyToTempFile(Stream source, CancellationToken cancellationToken)
+            public async Task<(string path, long length)> CopyToTempFile(Stream source, string extension = ".tmp", CancellationToken cancellationToken = default)
             {
-                var filePath = GetTempFilePath();
+                var filePath = GetTempFilePath(extension);
 
                 FileStream fileStream;
 
@@ -111,7 +111,7 @@ namespace MusicSyncConverter
 
     public interface ITempFileSession : IDisposable
     {
-        Task<(string path, long length)> CopyToTempFile(Stream source, CancellationToken cancellationToken);
-        string GetTempFilePath();
+        Task<(string path, long length)> CopyToTempFile(Stream source, string extension = ".tmp", CancellationToken cancellationToken = default);
+        string GetTempFilePath(string extension = ".tmp");
     }
 }

@@ -22,7 +22,7 @@ namespace MusicSyncConverter.Tags
 
         public async Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(FfProbeResult mediaAnalysis, string fileName, string fileExtension, CancellationToken cancellationToken)
         {
-            var tagFile = _tempFileSession.GetTempFilePath();
+            var tagFile = _tempFileSession.GetTempFilePath(".txt");
             await ExportTags(tagFile, fileName, cancellationToken);
 
             var tags = new List<KeyValuePair<string, string>>();
@@ -51,6 +51,7 @@ namespace MusicSyncConverter.Tags
                     }
                 }
             }
+            File.Delete(tagFile);
 
             return tags;
         }

@@ -37,7 +37,7 @@ namespace MusicSyncConverter.Tags
                 .Concat(albumArt.Select(x => new KeyValuePair<string, string>("METADATA_BLOCK_PICTURE", x.ToVorbisMetaDataBlockPicture())))
                 .ToList();
 
-            string tagsFile = _tempFileSession.GetTempFilePath();
+            var tagsFile = _tempFileSession.GetTempFilePath(".txt");
             using (var sw = new StreamWriter(tagsFile, false, new UTF8Encoding(false)) { NewLine = "\n" })
             {
                 foreach (var tag in tagsToSet)
@@ -48,6 +48,7 @@ namespace MusicSyncConverter.Tags
             }
 
             await ProcessStartHelper.RunProcess("vorbiscomment", new string[] { "--raw", "--escapes", "--write", "--commentfile", tagsFile, fileName }, cancellationToken: cancellationToken);
+            File.Delete(tagsFile);
         }
 
         private static string EscapeUnsafeChars(string x)

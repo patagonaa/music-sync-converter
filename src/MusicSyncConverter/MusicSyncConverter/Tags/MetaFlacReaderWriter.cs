@@ -51,7 +51,7 @@ namespace MusicSyncConverter.Tags
 
         protected async Task ImportSafeTags(IReadOnlyList<KeyValuePair<string, string>> tags, bool overwrite, string fileName, CancellationToken cancellationToken)
         {
-            string tagsFile = _tempFileSession.GetTempFilePath();
+            string tagsFile = _tempFileSession.GetTempFilePath(".txt");
             using (var sw = new StreamWriter(tagsFile, false, new UTF8Encoding(false)) { NewLine = "\n" })
             {
                 foreach (var tag in tags)
@@ -69,20 +69,17 @@ namespace MusicSyncConverter.Tags
             args.Add($"--import-tags-from={tagsFile}");
             args.Add(fileName);
 
-            var process = Process.Start("metaflac", args);
-            await process.WaitForExitAsync(cancellationToken);
-            if (process.ExitCode != 0)
-                throw new Exception($"metaflac exit code {process.ExitCode}");
+            await ProcessStartHelper.RunProcess("metaflac", args, cancellationToken: cancellationToken);
+
+            File.Delete(tagsFile);
         }
 
         protected async Task ImportUnsafeTag(KeyValuePair<string, string> tag, string fileName, CancellationToken cancellationToken)
         {
-            var tagFile = _tempFileSession.GetTempFilePath();
+            var tagFile = _tempFileSession.GetTempFilePath(".txt");
             await File.WriteAllTextAsync(tagFile, tag.Value.ReplaceLineEndings(), new UTF8Encoding(false), cancellationToken);
-            var process = Process.Start("metaflac", new string[] { "--no-utf8-convert", $"--set-tag-from-file={tag.Key}={tagFile}", fileName });
-            await process.WaitForExitAsync(cancellationToken);
-            if (process.ExitCode != 0)
-                throw new Exception($"metaflac exit code {process.ExitCode}");
+            await ProcessStartHelper.RunProcess("metaflac", new string[] { "--no-utf8-convert", $"--set-tag-from-file={tag.Key}={tagFile}", fileName }, cancellationToken: cancellationToken);
+            File.Delete(tagFile);
         }
 
         public override bool CanHandle(string fileExtension)

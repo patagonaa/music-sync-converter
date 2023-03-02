@@ -425,7 +425,7 @@ namespace MusicSyncConverter
                 return null;
             }
 
-            var tmpFilePath = _tempFileSession.GetTempFilePath();
+            var tmpFilePath = _tempFileSession.GetTempFilePath(".m3u");
 
             using (var sw = File.CreateText(tmpFilePath))
             {
@@ -551,7 +551,7 @@ namespace MusicSyncConverter
                     string tmpFilePath;
                     using (var inFile = fileProvider.GetFileInfo(workItem.SourceFileInfo.Path).CreateReadStream())
                     {
-                        (tmpFilePath, fileSize) = await _tempFileSession.CopyToTempFile(inFile, cancellationToken);
+                        (tmpFilePath, fileSize) = await _tempFileSession.CopyToTempFile(inFile, Path.GetExtension(workItem.SourceFileInfo.Path), cancellationToken);
                     }
                     sw.Stop();
 
@@ -591,7 +591,7 @@ namespace MusicSyncConverter
                     {
                         using (var coverStream = coverFileInfo.CreateReadStream())
                         {
-                            var (path, _) = await _tempFileSession.CopyToTempFile(coverStream, cancellationToken);
+                            var (path, _) = await _tempFileSession.CopyToTempFile(coverStream, Path.GetExtension(coverVariant), cancellationToken);
                             return path;
                         }
                     }
