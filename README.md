@@ -1,17 +1,16 @@
 # music-sync-converter
-Sync music to MP3 players, phones, flash drives for car radios and such. Detect and convert unsupported files automatically.
-Works on Windows and Linux, macOS is untested.
+rsync for your music library. Sync your music library to MP3 players, phones, flash drives etc. while automatically converting unsupported files.
 
 ## Features
 - sync only files that have been added/removed/changed
 - works with any directory structure (does not force you into a certain way of managing your music library)
-- use a local directory or WebDAV (e.g. Nextcloud) as a source
 - exclude files/directories
+- use a local directory or WebDAV (e.g. Nextcloud) as a source
 - use a local directory, MTP (Windows-only) or ADB as a target
 - convert unsupported files on-the-fly using FFMPEG
     - detect file support by extension, container, codec, profile, ...
     - override codec settings for certain paths
-- fast conversion due to pipelining and multithreading
+- fast conversion due to parallelization
 - automatically embed album art from the directory into the file
 - handle miscellaneous device limitations (configurable)
     - unsupported file formats/containers
@@ -23,6 +22,8 @@ Works on Windows and Linux, macOS is untested.
     - album art stretching
 
 ## Installation
+This project works on Windows and Linux, macOS is untested.
+
 ### Dependencies:
 - required
     - .NET 6 SDK
@@ -44,9 +45,11 @@ These have to be added to PATH manually.
 On Linux/MacOS you can probably just install these using the package manager (e.g. `apt install ffmpeg flac`).
 
 ## Usage:
-`dotnet run --project src\MusicSyncConverter\MusicSyncConverter -- config.json`
+`dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- config.json [...]`
 
 You can split the configuration file into multiple files and supply multiple config files as arguments, which might be useful if converting for different end devices but with the same directory settings.
+
+There are predefined device configs for Android and a few car stereos in `src/MusicSyncConverter/MusicSyncConverter/configs/`
 
 ## Config options
 Also see [example configs below](#example-configs).
@@ -187,7 +190,21 @@ This can be useful for:
 The number of workers to use for each step.
 
 ## Example configs:
-### Minimal config:
+### Minimal config using predefined device config
+- Sync `Z:\Audio` to `E:\Audio`
+- Use Android device config (convert unsupported files to opus, embed album art as 512x512 jpeg)
+
+`config.json`:
+```js
+{
+    "SourceDir": "file://Z:\\Audio\\",
+    "TargetDir": "file://E:\\Audio\\"
+}
+```
+
+Run using `dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- configs/config.device.Android.json config.json`.
+
+### Minimal "full" config:
 - Sync `Z:\Audio` to `E:\Audio`
 - Convert all files (regardless of current format) to 192kbit/s MP3
 - Keep/embed album art as 320x320px JPEG
