@@ -409,7 +409,8 @@ namespace MusicSyncConverter.Conversion
                 var remuxArgs = new List<string>
                 {
                     "-i", audioFilePath,
-                    "-i", metadataFile,
+                    "-f", "ffmetadata", "-i", metadataFile,
+                    "-map_metadata", "1",
                     "-c:a", "copy"
                 };
 
