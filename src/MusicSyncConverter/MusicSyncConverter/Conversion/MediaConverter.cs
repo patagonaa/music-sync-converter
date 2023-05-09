@@ -180,10 +180,10 @@ namespace MusicSyncConverter.Conversion
 
             foreach (var toApply in overrides.Skip(1))
             {
-                if ((toReturn.Extension != null && toReturn.Extension != toApply.Extension) ||
-                    (toReturn.Codec != null && toReturn.Codec != toApply.Codec) ||
-                    (toReturn.Profile != null && toReturn.Profile != toApply.Profile) ||
-                    (toReturn.Muxer != null && toReturn.Muxer != toApply.Muxer))
+                if ((toApply.Extension != null && toReturn.Extension != toApply.Extension) ||
+                    (toApply.Codec != null && toReturn.Codec != toApply.Codec) ||
+                    (toApply.Profile != null && toReturn.Profile != toApply.Profile) ||
+                    (toApply.Muxer != null && toReturn.Muxer != toApply.Muxer))
                 {
                     toReturn.Extension = toApply.Extension;
                     toReturn.Codec = toApply.Codec;
