@@ -168,8 +168,15 @@ namespace MusicSyncConverter.Conversion
             if (toApply.MaxSampleRateHz != null && (toReturn.SampleRateHz == null || toReturn.SampleRateHz > toApply.MaxSampleRateHz))
                 toReturn.SampleRateHz = toApply.MaxSampleRateHz;
 
-            if (toApply.MaxBitrate != null && (toReturn.Bitrate == null || toReturn.Bitrate > toApply.MaxBitrate))
-                toReturn.Bitrate = toApply.MaxBitrate;
+            if (toReturn.Codec.StartsWith("pcm", StringComparison.OrdinalIgnoreCase))
+            {
+                toReturn.Bitrate = null;
+            }
+            else
+            {
+                if (toApply.MaxBitrate != null && (toReturn.Bitrate == null || toReturn.Bitrate > toApply.MaxBitrate))
+                    toReturn.Bitrate = toApply.MaxBitrate;
+            }
 
             return toReturn;
         }
@@ -332,7 +339,7 @@ namespace MusicSyncConverter.Conversion
             args.AddRange(new[] { "-i", sourcePath });
 
             string? albumArtInput = null;
-            if (albumArtConfig?.Codec != null)
+            if (albumArtConfig?.Codec != null && encoderInfo.Muxer != "wav")
             {
                 if (hasEmbeddedCover)
                 {
