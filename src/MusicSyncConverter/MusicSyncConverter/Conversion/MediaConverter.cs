@@ -23,6 +23,9 @@ namespace MusicSyncConverter.Conversion
         private readonly ITempFileSession _tempFileSession;
         private readonly ILogger _logger;
 
+        // file formats that should be copied instead of remuxed if they are suppored by the target
+        private static readonly string[] _copyFormats = new[] { ".xm", ".it", ".mod" };
+
         public MediaConverter(ITempFileSession tempFileSession, ILogger logger)
         {
             _sanitizer = new TextSanitizer();
@@ -77,6 +80,15 @@ namespace MusicSyncConverter.Conversion
             EncoderInfo encoderInfo;
             if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis) && (mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)))
             {
+                if (_copyFormats.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
+                {
+                    using (var fs = File.OpenRead(inputFile))
+                    {
+                        var (inFileCopy, _) = await _tempFileSession.CopyToTempFile(fs, sourceExtension, cancellationToken);
+                        return (inFileCopy, sourceExtension);
+                    }
+                }
+
                 encoderInfo = GetEncoderInfoRemux(mediaAnalysis, sourceExtension);
             }
             else
@@ -318,7 +330,7 @@ namespace MusicSyncConverter.Conversion
                 (limitation.Profile == null || limitation.Profile.Equals(audioStream.Profile, StringComparison.OrdinalIgnoreCase)) &&
                 (limitation.MaxChannels == null || limitation.MaxChannels >= audioStream.Channels) &&
                 (limitation.MaxSampleRateHz == null || limitation.MaxSampleRateHz >= audioStream.SampleRateHz) &&
-                (limitation.MaxBitrate == null || limitation.MaxBitrate >= (audioStream.BitRate ?? mediaAnalysis.Format.BitRate) / 1000);
+                (limitation.MaxBitrate == null || limitation.MaxBitrate >= Math.Min(audioStream.BitRate ?? int.MaxValue, mediaAnalysis.Format.BitRate ?? int.MaxValue) / 1000);
         }
 
         private static string EncoderToCodec(string encoder)

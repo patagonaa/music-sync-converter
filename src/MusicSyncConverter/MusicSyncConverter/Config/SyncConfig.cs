@@ -15,7 +15,10 @@ namespace MusicSyncConverter.Config
                 ".opus",
                 ".wma",
                 ".wav",
-                ".aac"
+                ".aac",
+                ".mod",
+                ".it",
+                ".xm"
             };
         public TargetDeviceConfig DeviceConfig { get; set; } = null!;
         public IDictionary<string, FileFormatOverride>? PathFormatOverrides { get; set; }
