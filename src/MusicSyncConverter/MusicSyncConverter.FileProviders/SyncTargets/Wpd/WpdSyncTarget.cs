@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+using Vanara.Extensions;
 using Vanara.PInvoke;
 using static Vanara.PInvoke.Ole32;
 using static Vanara.PInvoke.PortableDeviceApi;
@@ -38,6 +40,75 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
             _pathComparer = new PathComparer(IsCaseSensitive().Result);
             _directoryContentsCache = new Dictionary<NormalizedPath, IList<SyncTargetFileInfo>?>(_pathComparer);
             _objectIdCache = new Dictionary<NormalizedPath, string>(_pathComparer);
+        }
+
+        private void GetFormats()
+        {
+            var allFormats = typeof(PortableDeviceApi)
+                .GetProperties(BindingFlags.Public | BindingFlags.Static)
+                .Where(x => x.Name.StartsWith("WPD_OBJECT_FORMAT_"))
+                .ToDictionary(x => (Guid)x.GetValue(null)!, x => x);
+
+            var allFormatProps = typeof(PortableDeviceApi)
+                .GetProperties(BindingFlags.Public | BindingFlags.Static)
+                .Where(x => x.PropertyType == typeof(PROPERTYKEY))
+                .ToDictionary(x => (PROPERTYKEY)x.GetValue(null)!, x => x);
+
+            var allFormatPropAttrs = typeof(PortableDeviceApi)
+                .GetProperties(BindingFlags.Public | BindingFlags.Static)
+                .Where(x => x.Name.StartsWith("WPD_PROPERTY_ATTRIBUTE_"))
+                .ToDictionary(x => (PROPERTYKEY)x.GetValue(null)!, x => x);
+
+            var caps = _device.Capabilities();
+
+            var all = new Dictionary<Guid, Dictionary<PROPERTYKEY, Dictionary<PROPERTYKEY, object>>>();
+            foreach (var format in caps.GetSupportedFormats(WPD_CONTENT_TYPE_AUDIO).Enumerate().Select(x => x.puuid ?? throw new ArgumentNullException()))
+            {
+                if (!allFormats.TryGetValue(format, out var formatName))
+                    continue;
+                var formatProps = new Dictionary<PROPERTYKEY, Dictionary<PROPERTYKEY, object>>();
+
+                foreach (var formatProp in caps.GetSupportedFormatProperties(format).Enumerate())
+                {
+                    var propAttrs = new Dictionary<PROPERTYKEY, object>();
+                    foreach (var attrs in caps.GetFixedPropertyAttributes(format, formatProp).Enumerate())
+                    {
+                        if (attrs.Item1 == WPD_PROPERTY_ATTRIBUTE_ENUMERATION_ELEMENTS)
+                        {
+                            var attrEnumElements = ((IPortableDevicePropVariantCollection)attrs.Item2.punkVal).Enumerate();
+                            if (formatProp == WPD_MEDIA_BITRATE_TYPE)
+                            {
+                                propAttrs.Add(attrs.Item1, attrEnumElements.Select(x => (WPD_BITRATE_TYPES)x.uintVal).ToArray());
+                            }
+                            else
+                            {
+                                propAttrs.Add(attrs.Item1, attrEnumElements.Select(x => x.Value).ToArray());
+                            }
+                        }
+                        else
+                        {
+                            propAttrs.Add(attrs.Item1, attrs.Item2.Value);
+                        }
+
+                    }
+                    formatProps.Add(formatProp, propAttrs);
+                }
+
+                all.Add(format, formatProps);
+            }
+            var clearText = all
+                .ToDictionary(
+                fmt => allFormats[fmt.Key].Name,
+                fmt => fmt.Value
+                    .ToDictionary(
+                        prop => allFormatProps.GetValueOrDefault(prop.Key)?.Name ?? prop.Key.ToString(),
+                        prop => prop.Value
+                            .ToDictionary(
+                                attr => allFormatPropAttrs[attr.Key].Name,
+                                attr => attr.Value
+                            )
+                        )
+                    );
         }
 
         private static IPortableDevice GetDevice(string toFind)
