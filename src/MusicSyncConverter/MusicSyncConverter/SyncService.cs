@@ -105,7 +105,7 @@ namespace MusicSyncConverter
                     var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, x.TargetFilePath, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-                    var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(async x => await CompareSongDates(x, config, targetPathComparer, syncTarget).ToListAsync(), readOptions);
+                    var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(async x => await CompareSongDates(x, config, targetPathComparer, syncTarget, cancellationToken).ToListAsync(), readOptions);
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // group files by their directory before comparing so we don't have to do a directory listing for every file
@@ -457,7 +457,7 @@ namespace MusicSyncConverter
             };
         }
 
-        private async IAsyncEnumerable<SongReadWorkItem> CompareSongDates(SongSyncInfo[] syncInfos, SyncConfig config, PathComparer targetPathComparer, ISyncTarget syncTarget)
+        private async IAsyncEnumerable<SongReadWorkItem> CompareSongDates(SongSyncInfo[] syncInfos, SyncConfig config, PathComparer targetPathComparer, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (syncInfos.Length == 0)
                 yield break;
@@ -477,7 +477,7 @@ namespace MusicSyncConverter
 
             var targetDirPath = _pathTransformer.TransformPath(proposedDirPath, PathTransformType.DirPath, config.DeviceConfig, out _);
 
-            var directoryContents = await syncTarget.GetDirectoryContents(targetDirPath);
+            var directoryContents = await syncTarget.GetDirectoryContents(targetDirPath, cancellationToken);
 
             foreach (var syncInfo in syncInfos)
             {

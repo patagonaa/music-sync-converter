@@ -259,6 +259,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
             var normalizedSubPath = new NormalizedPath(subPath);
             lock (_syncLock)
             {
+                var sw = Stopwatch.StartNew();
                 if (!_directoryContentsCache.TryGetValue(normalizedSubPath, out IList<SyncTargetFileInfo>? directoryContents))
                 {
                     var obj = GetObjectId(subPath);
@@ -277,15 +278,16 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                     }
                     _directoryContentsCache.TryAdd(normalizedSubPath, directoryContents);
                 }
+                sw.Stop();
+                Debug.WriteLine("GetDirectoryContents " + sw.ElapsedMilliseconds + "ms");
                 return Task.FromResult(directoryContents);
             }
         }
 
-        private SyncTargetFileInfo GetFileInfoInternal(string directoryPath, string? obj)
+        private SyncTargetFileInfo GetFileInfoInternal(string directoryPath, string obj)
         {
             var propertiesToFetch = new IPortableDeviceKeyCollection();
             propertiesToFetch.Add(WPD_OBJECT_NAME);
-            propertiesToFetch.Add(WPD_OBJECT_SIZE);
             propertiesToFetch.Add(WPD_OBJECT_DATE_MODIFIED);
             propertiesToFetch.Add(WPD_OBJECT_CONTENT_TYPE);
 
@@ -342,30 +344,36 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                 for (int i = 0; i < pathParts.Length; i++)
                 {
                     string? pathPart = pathParts[i];
-                    currentPath = Path.Join(currentPath, pathPart);
-
-                    NormalizedPath normalizedCurrentPath = new NormalizedPath(currentPath);
-                    if (_objectIdCache.TryGetValue(normalizedCurrentPath, out var foundObjId))
+                    string searchPath = Path.Join(currentPath, pathPart);
+                    NormalizedPath normalizedSearchPath = new NormalizedPath(searchPath);
+                    if (_objectIdCache.TryGetValue(normalizedSearchPath, out var foundObjId))
                     {
                         currentObject = foundObjId;
+                        currentPath = searchPath;
                     }
                     else
                     {
                         var items = _content.EnumObjects(0, currentObject);
-                        var foundChild = false;
+                        string? foundChild = null;
                         foreach (var item in items.Enumerate())
                         {
                             var itemProperties = _contentProperties.GetValues(item, keys);
-                            if (_pathComparer.FileNameEquals(itemProperties?.GetStringValue(WPD_OBJECT_NAME), pathPart))
+                            var name = itemProperties?.GetStringValue(WPD_OBJECT_NAME);
+
+                            if (_pathComparer.FileNameEquals(name, pathPart))
                             {
-                                foundChild = true;
-                                currentObject = item;
-                                break;
+                                _objectIdCache[normalizedSearchPath] = item;
+                                foundChild = item;
+                            }
+                            else if (name != null)
+                            {
+                                _objectIdCache[new NormalizedPath(Path.Join(currentPath, name))] = item;
                             }
                         }
-                        if (foundChild)
+                        if (foundChild != null)
                         {
-                            _objectIdCache[normalizedCurrentPath] = currentObject;
+                            currentObject = foundChild;
+                            currentPath = searchPath;
                             continue;
                         }
                         return null;
@@ -388,6 +396,8 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
 
         public Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken)
         {
+            if (files.Count == 0)
+                return Task.CompletedTask;
             lock (_syncLock)
             {
                 var sw = Stopwatch.StartNew();
