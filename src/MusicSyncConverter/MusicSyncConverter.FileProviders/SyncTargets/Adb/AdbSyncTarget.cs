@@ -40,7 +40,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
 
             var adbClient = new AdbServicesClient();
             var devices = await adbClient.GetDevices(cancellationToken);
-            var actualSerial = devices.FirstOrDefault(x => IsRequestedDevice(x, serial) && x.State == "device").Serial;
+            var actualSerial = devices.FirstOrDefault(x => IsRequestedDevice(x, serial) && x.State == AdbConnectionState.Device).Serial;
             if (actualSerial == null)
             {
                 Console.WriteLine($"Device {serial} not found!" + (devices.Count > 0 ? $" Available devices: {string.Join(";", devices.Select(x => x.Serial))}" : string.Empty));
@@ -50,7 +50,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
                 await foreach (var deviceStatus in adbClient.TrackDevices(cancellationToken))
                 {
                     Console.WriteLine(deviceStatus.ToString());
-                    if (IsRequestedDevice(deviceStatus, serial) && deviceStatus.State == "device")
+                    if (IsRequestedDevice(deviceStatus, serial) && deviceStatus.State == AdbConnectionState.Device)
                     {
                         actualSerial = deviceStatus.Serial;
                         trackDevicesCts.Cancel();
@@ -66,7 +66,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             return new AdbSyncTarget(actualSerial, basePath, adbClient, syncClient);
         }
 
-        private static bool IsRequestedDevice((string Serial, string _) device, string serial)
+        private static bool IsRequestedDevice((string Serial, AdbConnectionState _) device, string serial)
         {
             if (device.Serial == serial)
                 return true;
@@ -116,19 +116,17 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         public async Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
-            try
-            {
-                await _syncService.StatV2(path, cancellationToken: cancellationToken);
-            }
-            catch (AdbSyncException ex)
-            {
-                if (ex.ErrorCode == AdbSyncErrorCode.ENOENT)
-                    return null;
-                throw;
-            }
 
-            var dirList = await _syncService.ListV2(path, cancellationToken);
-            return dirList.Select(x => MapToFileInfo(x, Path.Join(subpath, GetFileName(x.FullPath)))).ToList();
+            var dirStat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
+
+            return dirStat.Error switch
+            {
+                AdbSyncErrorCode.None => (await _syncService.ListV2(path, cancellationToken))
+                    .Select(x => MapToFileInfo(x, Path.Join(subpath, GetFileName(x.FullPath))))
+                    .ToList(),
+                AdbSyncErrorCode.ENOENT => null,
+                _ => throw new Exception($"Stat {path}: {dirStat.Error}"),
+            };
         }
 
         private static string GetFileName(string path)
@@ -140,18 +138,13 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         {
             var path = GetUnixPath(subpath);
 
-            StatV2Entry stat;
-            try
+            var stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
+            return stat.Error switch
             {
-                stat = await _syncService.StatV2(path, cancellationToken: cancellationToken);
-            }
-            catch (AdbSyncException ex)
-            {
-                if (ex.ErrorCode == AdbSyncErrorCode.ENOENT)
-                    return null;
-                throw;
-            }
-            return MapToFileInfo(stat, subpath);
+                AdbSyncErrorCode.None => MapToFileInfo(stat, subpath),
+                AdbSyncErrorCode.ENOENT => null,
+                _ => throw new Exception($"Stat {path}: {stat.Error}"),
+            };
         }
 
         private static SyncTargetFileInfo MapToFileInfo(StatV2Entry stat, string path)
