@@ -25,8 +25,8 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             _fatSorter = new FatSorter();
         }
 
-        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default) => Task.FromResult(GetFileInfoInternal(path, cancellationToken));
-        public SyncTargetFileInfo? GetFileInfoInternal(string path, CancellationToken cancellationToken = default)
+        public Task<SyncTargetFileInfo?> GetFileInfo(string path, CancellationToken cancellationToken = default) => Task.FromResult(GetFileInfoInternal(path));
+        private SyncTargetFileInfo? GetFileInfoInternal(string path)
         {
             var physicalPath = GetPhysicalPath(path);
 
@@ -46,7 +46,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
         }
 
         public Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default) => Task.FromResult(GetDirectoryContentsInternal(subpath, cancellationToken));
-        public IList<SyncTargetFileInfo>? GetDirectoryContentsInternal(string subpath, CancellationToken cancellationToken = default)
+        private IList<SyncTargetFileInfo>? GetDirectoryContentsInternal(string subpath, CancellationToken cancellationToken = default)
         {
             var physicalPath = GetPhysicalPath(subpath);
             var dirInfo = new DirectoryInfo(physicalPath);
@@ -79,7 +79,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
 
             File.Delete(absolutePath); // delete the file if it exists to allow for name case changes is on a case-insensitive filesystem
-            using (var outputFile = File.OpenWrite(absolutePath))
+            using (var outputFile = new FileStream(absolutePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {
                 await content.CopyToAsync(outputFile, cancellationToken);
             }

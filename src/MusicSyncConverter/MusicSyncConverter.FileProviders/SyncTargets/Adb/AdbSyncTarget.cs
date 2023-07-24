@@ -46,14 +46,12 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
                 Console.WriteLine($"Device {serial} not found!" + (devices.Count > 0 ? $" Available devices: {string.Join(";", devices.Select(x => x.Serial))}" : string.Empty));
                 Console.WriteLine("Waiting for device...");
 
-                var trackDevicesCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 await foreach (var deviceStatus in adbClient.TrackDevices(cancellationToken))
                 {
                     Console.WriteLine(deviceStatus.ToString());
                     if (IsRequestedDevice(deviceStatus, serial) && deviceStatus.State == AdbConnectionState.Device)
                     {
                         actualSerial = deviceStatus.Serial;
-                        trackDevicesCts.Cancel();
                         break;
                     }
                 }

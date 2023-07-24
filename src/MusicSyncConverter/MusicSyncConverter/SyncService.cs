@@ -673,10 +673,6 @@ namespace MusicSyncConverter
                 File.Delete(file.TempFilePath);
                 Console.WriteLine($"<-- Write ({(fileSize / sw.Elapsed.TotalSeconds / 1024 / 1024).ToString("F2", CultureInfo.InvariantCulture)} MiB/s) {file.Path}");
             }
-            catch (TaskCanceledException)
-            {
-                throw;
-            }
             catch (OperationCanceledException)
             {
                 throw;

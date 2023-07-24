@@ -20,7 +20,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
     // https://github.com/teapottiger/WPDApi/blob/62be7c4acc6104aef108769b4496b35b0a7fbd53/PortableDevices/PortableDevice.cs
     // https://github.com/dahall/Vanara/blob/76722fbcf5c1f90dccee9751dc0367641e37b4f9/UnitTests/PInvoke/PortableDeviceApi/PortableDeviceApiTests.cs
     [SupportedOSPlatform("windows")]
-    public class WpdSyncTarget : ISyncTarget, IDisposable
+    public sealed class WpdSyncTarget : ISyncTarget, IDisposable
     {
         private readonly object _syncLock = new object();
         private readonly IPortableDevice _device;
