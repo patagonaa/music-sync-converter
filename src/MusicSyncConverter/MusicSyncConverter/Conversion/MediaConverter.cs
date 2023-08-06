@@ -53,6 +53,10 @@ namespace MusicSyncConverter.Conversion
             {
                 mediaAnalysis = await AnalyseAsync(inputFile, cancellationToken);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 throw new Exception("Error during FFProbe: " + ex);

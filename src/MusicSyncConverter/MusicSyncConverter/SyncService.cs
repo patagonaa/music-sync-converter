@@ -149,16 +149,15 @@ namespace MusicSyncConverter
                     }, workerOptions);
 
                     Console.WriteLine("Checking for new/changed files");
-
-                    // start pipeline by adding files to check for changes
-                    _ = ReadDirs(config, fileProvider, fileRouterBlock, targetCaseSensitive, cancellationToken);
-                    // wait until every pipeline element is done
                     try
                     {
                         // if there is a fault during comparison/reading/conversion/writing, cancel all other pipeline elements immediately to avoid freezing
                         _ = writeBlock.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
                         _ = convertSongBlock.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
                         _ = convertPlaylistBlock?.Completion.ContinueWith(x => HandlePipelineError(x.Exception!, cancellationTokenSource), TaskContinuationOptions.OnlyOnFaulted);
+
+                        // start pipeline by adding files to check for changes
+                        await ReadDirs(config, fileProvider, fileRouterBlock, targetCaseSensitive, cancellationToken);
 
                         await fileRouterBlock.Completion;
                         getSyncInfoBlock.Complete();
@@ -193,6 +192,26 @@ namespace MusicSyncConverter
                         // cancel everything as faults only get propagated to the blocks after the fault
                         // and we need all blocks to stop so we can exit the application
                         cancellationTokenSource.Cancel();
+
+                        var tasks = new[]
+                            {
+                                writeBlock,
+                                convertSongBlock,
+                                readSongBlock,
+                                compareSongBlock,
+                                groupSongsByDirectoryBlock,
+                                getSyncInfoBlock,
+                                readPlaylistBlock,
+                                resolvePlaylistBlock,
+                                convertPlaylistBlock,
+                                fileRouterBlock
+                            }
+                            .Where(x => x != null)
+                            .Select(x => x!.Completion)
+                            .ToList();
+
+                        // wait for all blocks to be fully cancelled so we don't return before everything is done/canceled
+                        await Task.WhenAll(tasks);
                         throw;
                     }
 
