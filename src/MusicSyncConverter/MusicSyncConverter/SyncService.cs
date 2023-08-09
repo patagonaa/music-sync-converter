@@ -755,10 +755,10 @@ namespace MusicSyncConverter
             foreach (var item in content)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!item.IsDirectory || await syncTarget.IsHidden(path, false))
-                    continue;
 
                 string subDir = Path.Join(path, item.Name);
+                if (!item.IsDirectory || await syncTarget.IsHidden(subDir, false))
+                    continue;
                 await DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
                 var subDirContents = (await syncTarget.GetDirectoryContents(subDir, cancellationToken)) ?? throw new ArgumentException($"missing directory {subDir}");
                 if (!subDirContents.Any())
