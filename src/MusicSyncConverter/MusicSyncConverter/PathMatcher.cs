@@ -12,29 +12,35 @@ namespace MusicSyncConverter
     // of this implementation and while this implementation is ugly, it works for my cases
     public class PathMatcher
     {
-        private readonly string _pathSeperatorRegex;
-        private readonly string _notPathSeperatorRegex;
-        private readonly ConcurrentDictionary<(string Glob, bool CaseSensitive), Regex> _globCache = new();
+        private static readonly string _pathSeperatorRegex;
+        private static readonly string _notPathSeperatorRegex;
 
-        public PathMatcher()
+        private readonly ConcurrentDictionary<string, Regex> _globCache = new();
+        private readonly bool _caseSensitive;
+
+        static PathMatcher()
         {
             var escapedPathSeperators = new HashSet<string>
             {
                 Regex.Escape(Path.DirectorySeparatorChar.ToString()),
                 Regex.Escape(Path.AltDirectorySeparatorChar.ToString())
             };
-
             _pathSeperatorRegex = $"[{string.Join(string.Empty, escapedPathSeperators)}]";
             _notPathSeperatorRegex = $"[^{string.Join(string.Empty, escapedPathSeperators)}]";
         }
 
-        public bool Matches(string glob, string path, bool caseSensitive)
+        public PathMatcher(bool caseSensitive)
         {
-            var regex = _globCache.GetOrAdd((glob, caseSensitive), key => GetRegexForGlob(key.Glob, key.CaseSensitive));
+            _caseSensitive = caseSensitive;
+        }
+
+        public bool Matches(string glob, string path)
+        {
+            var regex = _globCache.GetOrAdd(glob, key => GetRegexForGlob(key, _caseSensitive));
             return regex.IsMatch(PathUtils.NormalizePath(path));
         }
 
-        private Regex GetRegexForGlob(string glob, bool caseSensitive)
+        private static Regex GetRegexForGlob(string glob, bool caseSensitive)
         {
             if (glob.Contains("***"))
                 throw new ArgumentException("only '*' and '**' wildcards are allowed");

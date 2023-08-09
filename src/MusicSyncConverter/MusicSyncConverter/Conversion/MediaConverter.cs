@@ -15,7 +15,6 @@ namespace MusicSyncConverter.Conversion
     class MediaConverter
     {
         private readonly ITextSanitizer _sanitizer;
-        private readonly PathMatcher _pathMatcher;
         private readonly List<ITagReader> _tagReaders;
         private readonly List<ITagWriter> _tagWriters;
         private readonly FfmpegTagReader _ffmpegTagReader;
@@ -29,7 +28,6 @@ namespace MusicSyncConverter.Conversion
         public MediaConverter(ITempFileSession tempFileSession, ILogger logger)
         {
             _sanitizer = new TextSanitizer();
-            _pathMatcher = new PathMatcher();
             _tagReaders = new List<ITagReader> { new MetaFlacReaderWriter(tempFileSession), new VorbisCommentReaderWriter(tempFileSession) };
             // writing large files with vorbiscomment is really, really slow so we accept not being able to write duplicate keys correctly
             _tagWriters = new List<ITagWriter> { new MetaFlacReaderWriter(tempFileSession), /* new VorbisCommentReaderWriter(tempFileSession) */ };
@@ -39,7 +37,7 @@ namespace MusicSyncConverter.Conversion
             _logger = logger;
         }
 
-        public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, CancellationToken cancellationToken)
+        public async Task<(string OutputFile, string OutputExtension)> RemuxOrConvert(PathMatcher pathMatcher, SyncConfig config, string inputFile, string originalFilePath, string? albumArtPath, CancellationToken cancellationToken)
         {
             var sourceExtension = Path.GetExtension(originalFilePath);
 
@@ -78,7 +76,7 @@ namespace MusicSyncConverter.Conversion
 
             var albumArtConfig = config.DeviceConfig.AlbumArt;
 
-            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => _pathMatcher.Matches(x.Key, originalFilePath, false)).Select(x => x.Value).ToList();
+            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => pathMatcher.Matches(x.Key, originalFilePath)).Select(x => x.Value).ToList();
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
             EncoderInfo encoderInfo;
