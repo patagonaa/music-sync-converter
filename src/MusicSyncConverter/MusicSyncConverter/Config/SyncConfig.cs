@@ -25,6 +25,7 @@ namespace MusicSyncConverter.Config
         public string SourceDir { get; set; } = null!;
         public string TargetDir { get; set; } = null!;
         public IList<string>? Exclude { get; set; }
+        public IList<string>? KeepInTarget { get; set; }
         public int? WorkersRead { get; set; }
         public int? WorkersConvert { get; set; }
         public int? WorkersWrite { get; set; }

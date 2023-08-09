@@ -61,7 +61,7 @@ The source directory as an URI.
 
 ### TargetDir
 The target directory as an URI.
-Be aware that everything in this directory will be deleted (unless it is hidden or already synchronized to the source dir).
+Be aware that everything in this directory will be deleted (see [KeepInTarget](#keepintarget) for details).
 - File system: `file://` (for example `file://F:/Music` or `file:///mnt/usb/Music`)
     - supports the query parameter `?fatSortMode=<mode>` where `<mode>` is `None`, `Folders`, `Files`, `FilesAndFolders` to sort the FAT32 table when directories change. This is useful for devices that don't sort files or directory by name.
 - (on Windows) MTP using [WPD](https://docs.microsoft.com/en-us/windows/win32/windows-portable-devices): `wpd://` (for example `wpd://My Android Phone/disk/Music`)
@@ -78,6 +78,17 @@ Examples:
 - `Music/**/Instrumentals` ignores `Music/Example Artist/Instrumentals` and `Music/Albums/Example Artist/Instrumentals`
 - `Music/*/Instrumentals` ignores `Music/Example Artist/Instrumentals` but not `Music/Albums/Example Artist/Instrumentals`
 - `Music/Albums/**/*.m3u` ignores `Music/Albums/Example Artist/playlist.m3u` but not `Music/Playlists/playlist.m3u`
+
+### KeepInTarget
+By default, all files in the target directory (excluding hidden files/directories) that don't exist in the source will be deleted.
+
+Files or directories that match one of these globs will not be deleted regardless of sync state.
+Wildcards `*` (any directory) and `**` (any directory structure) are supported.
+
+This is mostly useful if you have to sync to the root directory of e.g. a flash drive and there are other files you want to keep.
+
+Example:
+- `Videos` ignores `Videos/` in the root folder
 
 ### DeviceConfig
 In case you want to sync your music to multiple devices, it may be helpful to put this section in a seperate file each.
@@ -230,7 +241,7 @@ Run using `dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- con
 ```
 
 ### Advanced example:
-- Sync `Z:\Audio` to `E:\Audio`
+- Sync `Z:\Audio` to `E:\`
 - Reorder file table on target (required if the target device doesn't sort files and/or folders by itself and instead uses the FAT order)
 - Exclude `Z:\Audio\Webradio`, `Z:\Audio\Music\Artists\Nickelback` and `Z:\Audio\Music\Artists\**\Instrumentals` (`*` and `**` wildcards are supported)
 - Copy all MP3, WMA and AAC-LC files
@@ -246,7 +257,10 @@ Run using `dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- con
 ```js
 {
     "SourceDir": "file://Z:\\Audio\\",
-    "TargetDir": "file://E:\\Audio\\?fatSortMode=Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders", default is "None"
+    "TargetDir": "file://E:\\?fatSortMode=Folders", // Valid Values are "None", "Files", "Folders", "FilesAndFolders", default is "None"
+    "KeepInTarget": [
+        "Videos" // don't delete E:\Videos when syncing
+    ]
     "Exclude": [
         "Webradio",
         "Music\\Artists\\Nickelback",

@@ -219,7 +219,7 @@ namespace MusicSyncConverter
 
                     // delete additional files and empty directories
                     Console.WriteLine("Checking for leftover files/directories");
-                    await DeleteAdditional(syncTarget, handledFiles, pathComparer, cancellationToken);
+                    await DeleteAdditional(syncTarget, handledFiles, pathComparer, pathMatcher, config.KeepInTarget, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
                 }
@@ -619,7 +619,7 @@ namespace MusicSyncConverter
             return null;
         }
 
-        private async Task<OutputFile?> ConvertSong(PathMatcher pathMatcher,  SongConvertWorkItem workItem, SyncConfig config, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken cancellationToken)
+        private async Task<OutputFile?> ConvertSong(PathMatcher pathMatcher, SongConvertWorkItem workItem, SyncConfig config, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken cancellationToken)
         {
             try
             {
@@ -703,7 +703,7 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task DeleteAdditional(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer pathComparer, CancellationToken cancellationToken)
+        private async Task DeleteAdditional(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer pathComparer, PathMatcher pathMatcher, IList<string>? keepPatterns, CancellationToken cancellationToken)
         {
             var normalizedHandledFiles = handledFiles.Select(x => new NormalizedPath(x.TargetPath)).ToHashSet();
 
@@ -724,7 +724,7 @@ namespace MusicSyncConverter
                     cancellationToken.ThrowIfCancellationRequested();
 
                     string itemPath = Path.Join(path, item.Name);
-                    if (await syncTarget.IsHidden(itemPath))
+                    if (await syncTarget.IsHidden(itemPath) || (keepPatterns?.Any(x => pathMatcher.Matches(x, itemPath)) ?? false))
                         continue;
                     if (item.IsDirectory)
                     {
