@@ -81,11 +81,11 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
 
         public async Task Delete(IReadOnlyCollection<SyncTargetFileInfo> adbItems, CancellationToken cancellationToken)
         {
-            foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
+            foreach (var batch in adbItems.Where(x => !x.IsDirectory).Chunk(10))
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -93,11 +93,11 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
                 }
             }
 
-            foreach (var batch in adbItems.Where(x => !x.IsDirectory).Chunk(10))
+            foreach (var batch in adbItems.Where(x => x.IsDirectory).Chunk(10))
             {
                 using (var ms = new MemoryStream())
                 {
-                    var returnCode = await _adbClient.Execute(_deviceSerial, "rm", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
+                    var returnCode = await _adbClient.Execute(_deviceSerial, "rmdir", batch.Select(x => GetUnixPath(x.Path)), null, ms, ms, cancellationToken);
                     if (returnCode != 0)
                     {
                         throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
@@ -155,10 +155,10 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             return Task.FromResult(true);
         }
 
-        public Task<bool> IsHidden(string path, bool recurse)
+        public Task<bool> IsHidden(string path)
         {
             var pathParts = PathUtils.GetPathStack(path);
-            return Task.FromResult(recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.'));
+            return Task.FromResult(pathParts.First().StartsWith('.'));
         }
 
         public IChangeToken Watch(string filter)

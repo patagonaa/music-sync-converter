@@ -152,50 +152,25 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             return Task.CompletedTask;
         }
 
-        public Task<bool> IsHidden(string path, bool recurse) => Task.FromResult(IsHiddenInternal(path, recurse));
-        private bool IsHiddenInternal(string path, bool recurse)
+        public Task<bool> IsHidden(string path) => Task.FromResult(IsHiddenInternal(path));
+        private bool IsHiddenInternal(string path)
         {
-            if (recurse)
+            var pathStack = PathUtils.GetPathStack(path);
+            if (pathStack.First().StartsWith('.'))
             {
-                var currentPath = string.Empty;
-
-                foreach (var pathPart in PathUtils.GetPathStack(path).Reverse())
-                {
-                    if (pathPart.StartsWith('.'))
-                        return true;
-
-                    currentPath = Path.Join(currentPath, pathPart);
-
-                    // if we're on Windows (or macOS?), also check Hidden attribute
-                    if (Environment.OSVersion.Platform != PlatformID.Unix)
-                    {
-                        var physicalPath = GetPhysicalPath(currentPath);
-                        var attributes = File.GetAttributes(physicalPath);
-                        if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
-                            return true;
-                    }
-                }
-                return false;
+                return true;
             }
-            else
+
+            // if we're on Windows (or macOS?), also check Hidden attribute
+            if (Environment.OSVersion.Platform != PlatformID.Unix)
             {
-                var pathStack = PathUtils.GetPathStack(path);
-                if (pathStack.First().StartsWith('.'))
-                {
+                var physicalPath = GetPhysicalPath(path);
+                var attributes = File.GetAttributes(physicalPath);
+                if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
                     return true;
-                }
-
-                // if we're on Windows (or macOS?), also check Hidden attribute
-                if (Environment.OSVersion.Platform != PlatformID.Unix)
-                {
-                    var physicalPath = GetPhysicalPath(path);
-                    var attributes = File.GetAttributes(physicalPath);
-                    if (attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System))
-                        return true;
-                }
-
-                return false;
             }
+
+            return false;
         }
     }
 }

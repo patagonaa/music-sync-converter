@@ -388,10 +388,10 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
             }
         }
 
-        public Task<bool> IsHidden(string path, bool recurse)
+        public Task<bool> IsHidden(string path)
         {
             var pathParts = PathUtils.GetPathStack(path);
-            return Task.FromResult(recurse ? pathParts.Any(x => x.StartsWith('.')) : pathParts.First().StartsWith('.'));
+            return Task.FromResult(pathParts.First().StartsWith('.'));
         }
 
         public Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken)

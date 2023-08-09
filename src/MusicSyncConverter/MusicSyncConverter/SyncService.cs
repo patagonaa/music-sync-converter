@@ -216,10 +216,8 @@ namespace MusicSyncConverter
                     }
 
                     // delete additional files and empty directories
-                    Console.WriteLine("Checking for leftover files");
-                    await DeleteAdditionalFiles(syncTarget, handledFiles, targetPathComparer, cancellationToken);
-                    Console.WriteLine("Checking for empty subdirectories");
-                    await DeleteEmptySubdirectories("", syncTarget, cancellationToken);
+                    Console.WriteLine("Checking for leftover files/directories");
+                    await DeleteAdditional(syncTarget, handledFiles, targetPathComparer, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
                 }
@@ -703,71 +701,52 @@ namespace MusicSyncConverter
             }
         }
 
-        private async Task DeleteAdditionalFiles(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer targetPathComparer, CancellationToken cancellationToken)
+        private async Task DeleteAdditional(ISyncTarget syncTarget, IEnumerable<FileSourceTargetInfo> handledFiles, PathComparer targetPathComparer, CancellationToken cancellationToken)
         {
-            var files = GetAllFiles("", syncTarget, cancellationToken);
-            var toDelete = new List<SyncTargetFileInfo>();
-
             var normalizedHandledFiles = handledFiles.Select(x => new NormalizedPath(x.TargetPath)).ToHashSet();
-            await foreach (var file in files)
+
+            var (allToDelete, _) = await GetToDelete("");
+            foreach (var x in allToDelete)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var normalizedPath = new NormalizedPath(file.Path);
-
-                if (await syncTarget.IsHidden(file.Path, true))
-                {
-                    // hidden file/dir
-                    continue;
-                }
-
-                if (!normalizedHandledFiles.Contains(normalizedPath, targetPathComparer))
-                {
-                    toDelete.Add(file);
-                    Console.WriteLine($"Delete {file.Path}");
-                }
+                Console.WriteLine($"Delete {x.Path}");
             }
-            await syncTarget.Delete(toDelete, cancellationToken);
-        }
+            await syncTarget.Delete(allToDelete, cancellationToken);
 
-        private async IAsyncEnumerable<SyncTargetFileInfo> GetAllFiles(string directoryPath, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            var contents = (await syncTarget.GetDirectoryContents(directoryPath, cancellationToken)) ?? throw new ArgumentException($"missing directory {directoryPath}");
-            foreach (var fileInfo in contents)
+            async Task<(List<SyncTargetFileInfo> ToDelete, bool IsEmpty)> GetToDelete(string path)
             {
-                if (fileInfo.IsDirectory)
+                var content = (await syncTarget.GetDirectoryContents(path, cancellationToken)) ?? throw new ArgumentException($"missing directory {path}");
+                var leftoverContent = new HashSet<SyncTargetFileInfo>(content);
+                var toDelete = new List<SyncTargetFileInfo>();
+                foreach (var item in content)
                 {
-                    await foreach (var file in GetAllFiles(fileInfo.Path, syncTarget, cancellationToken))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    string itemPath = Path.Join(path, item.Name);
+                    if (await syncTarget.IsHidden(itemPath))
+                        continue;
+                    if (item.IsDirectory)
                     {
-                        yield return file;
+                        var (subItemsToDelete, subDirIsEmpty) = await GetToDelete(itemPath);
+                        toDelete.AddRange(subItemsToDelete);
+                        if (subDirIsEmpty)
+                        {
+                            leftoverContent.Remove(item);
+                            toDelete.Add(item);
+                        }
+                    }
+                    else
+                    {
+                        if (!normalizedHandledFiles.Contains(new NormalizedPath(itemPath), targetPathComparer))
+                        {
+                            leftoverContent.Remove(item);
+                            toDelete.Add(item);
+                        }
                     }
                 }
-                else
-                {
-                    yield return fileInfo;
-                }
+                return (toDelete, !leftoverContent.Any());
             }
         }
 
-        private async Task DeleteEmptySubdirectories(string path, ISyncTarget syncTarget, CancellationToken cancellationToken)
-        {
-            var content = (await syncTarget.GetDirectoryContents(path, cancellationToken)) ?? throw new ArgumentException($"missing directory {path}");
-            foreach (var item in content)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string subDir = Path.Join(path, item.Name);
-                if (!item.IsDirectory || await syncTarget.IsHidden(subDir, false))
-                    continue;
-                await DeleteEmptySubdirectories(subDir, syncTarget, cancellationToken);
-                var subDirContents = (await syncTarget.GetDirectoryContents(subDir, cancellationToken)) ?? throw new ArgumentException($"missing directory {subDir}");
-                if (!subDirContents.Any())
-                {
-                    Console.WriteLine($"Delete {subDir}");
-                    await syncTarget.Delete(new[] { item }, cancellationToken);
-                }
-            }
-        }
 
         private class FileSourceTargetInfo
         {

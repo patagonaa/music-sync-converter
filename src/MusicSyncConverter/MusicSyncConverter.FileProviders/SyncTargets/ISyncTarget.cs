@@ -13,7 +13,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets
         Task<bool> IsCaseSensitive();
         Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default);
         Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken);
-        Task<bool> IsHidden(string path, bool recurse);
+        Task<bool> IsHidden(string path);
         Task Complete(CancellationToken cancellationToken);
     }
 }

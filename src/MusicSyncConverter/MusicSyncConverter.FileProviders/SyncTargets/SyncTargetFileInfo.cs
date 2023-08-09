@@ -15,5 +15,9 @@ namespace MusicSyncConverter.FileProviders.SyncTargets
         public string Name { get; }
         public bool IsDirectory { get; }
         public DateTimeOffset LastModified { get; }
+        public override string ToString()
+        {
+            return $"{(IsDirectory ? "Dir" : "File")}: {Path}";
+        }
     }
 }
