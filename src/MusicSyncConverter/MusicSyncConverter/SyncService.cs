@@ -146,8 +146,8 @@ namespace MusicSyncConverter
 
                     var fileRouterBlock = new ActionBlock<SourceFileInfo>(async file =>
                     {
-                        await getSyncInfoBlock.SendAsync(file);
-                        await readPlaylistBlock.SendAsync(file);
+                        await getSyncInfoBlock.SendAsync(file, cancellationToken);
+                        await readPlaylistBlock.SendAsync(file, cancellationToken);
                     }, workerOptions);
 
                     Console.WriteLine("Checking for new/changed files");
@@ -280,11 +280,11 @@ namespace MusicSyncConverter
             return FilterNull(result);
         }
 
-        private async Task ReadDirs(SyncConfig config, IFileProvider fileProvider, ITargetBlock<SourceFileInfo> targetBlock, PathMatcher matcher, CancellationToken cancellationToken)
+        private async Task ReadDirs(SyncConfig config, IFileProvider fileProvider, ITargetBlock<SourceFileInfo> targetBlock, PathMatcher pathMatcher, CancellationToken cancellationToken)
         {
             try
             {
-                var files = ReadDir(config, fileProvider, "", matcher, cancellationToken);
+                var files = ReadDir("");
                 foreach (var file in files)
                 {
                     await targetBlock.SendAsync(file, cancellationToken);
@@ -296,38 +296,38 @@ namespace MusicSyncConverter
                 targetBlock.Fault(ex);
                 throw;
             }
-        }
 
-        private IEnumerable<SourceFileInfo> ReadDir(SyncConfig config, IFileProvider fileProvider, string dir, PathMatcher pathMatcher, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (config.Exclude?.Any(glob => pathMatcher.Matches(glob, dir)) ?? false)
-            {
-                yield break;
-            }
-            var directoryContents = fileProvider.GetDirectoryContents(dir).ToList();
-            foreach (var file in directoryContents.Where(x => !x.IsDirectory))
+            IEnumerable<SourceFileInfo> ReadDir(string dir)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string filePath = Path.Join(dir, file.Name);
-                if (config.Exclude?.Any(glob => pathMatcher.Matches(glob, filePath)) ?? false)
+
+                if (config.Exclude?.Any(glob => pathMatcher.Matches(glob, dir)) ?? false)
                 {
-                    continue;
+                    yield break;
+                }
+                var directoryContents = fileProvider.GetDirectoryContents(dir).ToList();
+                foreach (var file in directoryContents.Where(x => !x.IsDirectory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string filePath = Path.Join(dir, file.Name);
+                    if (config.Exclude?.Any(glob => pathMatcher.Matches(glob, filePath)) ?? false)
+                    {
+                        continue;
+                    }
+
+                    yield return new SourceFileInfo
+                    {
+                        Path = filePath,
+                        ModifiedDate = file.LastModified
+                    };
                 }
 
-                yield return new SourceFileInfo
+                foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
                 {
-                    Path = filePath,
-                    ModifiedDate = file.LastModified
-                };
-            }
-
-            foreach (var subDir in directoryContents.Where(x => x.IsDirectory))
-            {
-                foreach (var file in ReadDir(config, fileProvider, Path.Join(dir, subDir.Name), pathMatcher, cancellationToken))
-                {
-                    yield return file;
+                    foreach (var file in ReadDir(Path.Join(dir, subDir.Name)))
+                    {
+                        yield return file;
+                    }
                 }
             }
         }
