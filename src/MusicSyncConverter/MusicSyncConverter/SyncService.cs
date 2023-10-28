@@ -643,11 +643,6 @@ namespace MusicSyncConverter
                             {
                                 throw;
                             }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error while converting");
-                                return null;
-                            }
                             var outFilePath = Path.ChangeExtension(workItem.TargetFilePath, outputExtension);
 
                             handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, outFilePath));
