@@ -91,8 +91,15 @@ namespace MusicSyncConverter.Tags
         {
             try
             {
-                ProcessStartHelper.RunProcess("metaflac", new[] { "--version" }).Wait();
-                return true;
+                try
+                {
+                    ProcessStartHelper.RunProcess("metaflac", new[] { "--version" }).Wait();
+                    return true;
+                }
+                catch (AggregateException ex)
+                {
+                    throw ex.InnerExceptions[0];
+                }
             }
             catch (Win32Exception)
             {

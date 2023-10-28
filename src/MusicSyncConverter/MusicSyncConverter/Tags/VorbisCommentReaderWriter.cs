@@ -73,7 +73,14 @@ namespace MusicSyncConverter.Tags
             try
             {
                 using var stderr = new StringWriter();
-                ProcessStartHelper.RunProcess("vorbiscomment", new[] { "--version" }, null, stderr).Wait();
+                try
+                {
+                    ProcessStartHelper.RunProcess("vorbiscomment", new[] { "--version" }, null, stderr).Wait();
+                }
+                catch (AggregateException ex)
+                {
+                    throw ex.InnerExceptions[0];
+                }
                 return Version.Parse(_versionRegex.Match(stderr.ToString()).Value);
             }
             catch (Win32Exception)
