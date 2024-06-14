@@ -34,8 +34,9 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             {
                 await Process.Start("adb", "start-server").WaitForExitAsync(cancellationToken);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine("Could not start ADB server: " + ex);
             }
 
             var adbClient = new AdbServicesClient();
