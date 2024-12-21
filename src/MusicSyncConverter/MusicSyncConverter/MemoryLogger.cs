@@ -20,7 +20,8 @@ namespace MusicSyncConverter
             _scopeProvider = new ScopeProvider();
         }
 
-        public IDisposable BeginScope<TState>(TState state)
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
         {
             return _scopeProvider.Push(state);
         }

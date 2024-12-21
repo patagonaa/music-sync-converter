@@ -241,7 +241,7 @@ namespace MusicSyncConverter
                 cancellationTokenSource.Cancel();
         }
 
-        private IDisposable StartLogContext(SourceFileInfo sourceFile, string? targetFile)
+        private IDisposable? StartLogContext(SourceFileInfo sourceFile, string? targetFile)
         {
             return _logger.BeginScope(new Dictionary<string, object?>
             {

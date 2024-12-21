@@ -27,8 +27,8 @@ namespace MusicSyncConverter.UnitTests
         public void CaseInsensitive_Equals(bool expected, string path1, string path2)
         {
             var sut = new PathComparer(false);
-            Assert.AreEqual(expected, sut.Equals(path1, path2));
-            Assert.AreEqual(expected, sut.Equals(path2, path1));
+            Assert.That(sut.Equals(path1, path2), Is.EqualTo(expected));
+            Assert.That(sut.Equals(path2, path1), Is.EqualTo(expected));
         }
 
         [TestCase(true, "", "")]
@@ -52,8 +52,8 @@ namespace MusicSyncConverter.UnitTests
         public void CaseSensitive_Equals(bool expected, string path1, string path2)
         {
             var sut = new PathComparer(true);
-            Assert.AreEqual(expected, sut.Equals(path1, path2));
-            Assert.AreEqual(expected, sut.Equals(path2, path1));
+            Assert.That(sut.Equals(path1, path2), Is.EqualTo(expected));
+            Assert.That(sut.Equals(path2, path1), Is.EqualTo(expected));
         }
     }
 }

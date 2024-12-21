@@ -148,7 +148,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
 
         private static SyncTargetFileInfo MapToFileInfo(StatV2Entry stat, string path)
         {
-            return new SyncTargetFileInfo(path, stat.Mode.HasFlag(UnixFileMode.Directory), stat.ModifiedTime);
+            return new SyncTargetFileInfo(path, stat.Mode.HasFlag(AdbClient.UnixFileMode.Directory), stat.ModifiedTime);
         }
 
         public Task<bool> IsCaseSensitive()
@@ -170,7 +170,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         public async Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
-            await _syncService.Push(path, content, modified ?? DateTimeOffset.Now, (UnixFileMode)Convert.ToInt32("660", 8), cancellationToken);
+            await _syncService.Push(path, content, modified ?? DateTimeOffset.Now, (AdbClient.UnixFileMode)Convert.ToInt32("660", 8), cancellationToken);
             var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
             var command = "am";
             var parms = new string[] { "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", fileUrl };

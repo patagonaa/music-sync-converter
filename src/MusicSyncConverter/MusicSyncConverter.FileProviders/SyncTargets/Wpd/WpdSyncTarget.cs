@@ -71,11 +71,11 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                 foreach (var formatProp in caps.GetSupportedFormatProperties(format).Enumerate())
                 {
                     var propAttrs = new Dictionary<PROPERTYKEY, object>();
-                    foreach (var attrs in caps.GetFixedPropertyAttributes(format, formatProp).Enumerate())
+                    foreach (var attrs in caps.GetFixedPropertyAttributes(format, formatProp)!.Enumerate())
                     {
                         if (attrs.Item1 == WPD_PROPERTY_ATTRIBUTE_ENUMERATION_ELEMENTS)
                         {
-                            var attrEnumElements = ((IPortableDevicePropVariantCollection)attrs.Item2.punkVal).Enumerate();
+                            var attrEnumElements = ((IPortableDevicePropVariantCollection)attrs.Item2.punkVal!).Enumerate();
                             if (formatProp == WPD_MEDIA_BITRATE_TYPE)
                             {
                                 propAttrs.Add(attrs.Item1, attrEnumElements.Select(x => (WPD_BITRATE_TYPES)x.uintVal).ToArray());
@@ -87,7 +87,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
                         }
                         else
                         {
-                            propAttrs.Add(attrs.Item1, attrs.Item2.Value);
+                            propAttrs.Add(attrs.Item1, attrs.Item2.Value!);
                         }
 
                     }

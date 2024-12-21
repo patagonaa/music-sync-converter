@@ -37,7 +37,7 @@ namespace MusicSyncConverter.UnitTests
                 NormalizeCase = true
             };
             var result = _sut.TransformPath(text, PathTransformType.DirPath, deviceConfig, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("", "")]
@@ -55,7 +55,7 @@ namespace MusicSyncConverter.UnitTests
                 NormalizeCase = false
             };
             var result = _sut.TransformPath(text, PathTransformType.DirPath, deviceConfig, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("", "")]
@@ -74,7 +74,7 @@ namespace MusicSyncConverter.UnitTests
                 NormalizeCase = false
             };
             var result = _sut.TransformPath(text, PathTransformType.FilePath, deviceConfig, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
     }
 }

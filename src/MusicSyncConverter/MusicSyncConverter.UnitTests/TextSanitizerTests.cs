@@ -13,15 +13,15 @@ namespace MusicSyncConverter.UnitTests
         }
 
         [TestCase("!§$%&/()=?*\\")]
-        public void Test_NoLimitations_Text_NoChange(string text)
+        public void Test_NoLimitations_Text_NoChange(string expected)
         {
             var limitations = new CharacterLimitations
             {
                 Replacements = null,
                 SupportedChars = null
             };
-            var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(text, result);
+            var result = _sut.SanitizeText(limitations, expected, out _);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("!§$%&()=_", "!§$%&()=\0")]
@@ -33,7 +33,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = null
             };
             var result = _sut.SanitizePathPart(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("aeoeueAeOeUess<3x", "äöüÄÖÜß♥×")]
@@ -56,7 +56,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = null
             };
             var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("2𝟘𝟙X", "𝟚𝟘𝟙𝕏")]
@@ -72,7 +72,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = null
             };
             var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("201X", "𝟚𝟘𝟙𝕏")]
@@ -88,7 +88,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = null
             };
             var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("VIII", "Ⅷ", "")]
@@ -105,7 +105,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = supportedChars
             };
             var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase("02 ♫ II／ The SALON.flac", "02 ♫ Ⅱ／ The SALON.flac")]
@@ -122,7 +122,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz."
             };
             var result = _sut.SanitizePathPart(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [Ignore("this is kinda messy to handle so I don't care")]
@@ -138,7 +138,7 @@ namespace MusicSyncConverter.UnitTests
                 SupportedChars = null
             };
             var result = _sut.SanitizeText(limitations, text, out _);
-            Assert.AreEqual(expected, result);
+            Assert.That(result, Is.EqualTo(expected));
         }
     }
 }

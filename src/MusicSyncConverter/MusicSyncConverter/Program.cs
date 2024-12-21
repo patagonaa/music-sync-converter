@@ -30,7 +30,7 @@ namespace MusicSyncConverter
 
             var configRoot = configBuilder.Build();
 
-            var config = configRoot.Get<SyncConfig>();
+            var config = configRoot.Get<SyncConfig>() ?? throw new Exception("Missing Sync Config");
 
             var cts = new CancellationTokenSource();
 

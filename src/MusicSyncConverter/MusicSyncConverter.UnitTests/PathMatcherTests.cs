@@ -30,7 +30,7 @@ namespace MusicSyncConverter.UnitTests
 #endif
         public void EquivalentPathMatches(bool expected, string glob, string path, bool caseSensitive)
         {
-            Assert.AreEqual(expected, GetSut(caseSensitive).Matches(glob, path));
+            Assert.That(GetSut(caseSensitive).Matches(glob, path), Is.EqualTo(expected));
         }
 
         [TestCase(true, "Music/*/John Doe/Example Album", "Music/Artists/John Doe/Example Album")]
@@ -41,7 +41,7 @@ namespace MusicSyncConverter.UnitTests
         [TestCase(true, "Music/Artists/John Doe/*", "Music/Artists/John Doe/Example Album")]
         public void SinglePathWildcardMatches(bool expected, string glob, string path)
         {
-            Assert.AreEqual(expected, GetSut(true).Matches(glob, path));
+            Assert.That(GetSut(true).Matches(glob, path), Is.EqualTo(expected));
         }
 
         [TestCase(true, "Music/**/Example Album", "Music/Artists/John Doe/Example Album")]
@@ -50,7 +50,7 @@ namespace MusicSyncConverter.UnitTests
         [TestCase(true, "**/Example Album", "Music/Artists/John Doe/Example Album")]
         public void RecursivePathWildcardMatches(bool expected, string glob, string path)
         {
-            Assert.AreEqual(expected, GetSut(true).Matches(glob, path));
+            Assert.That(GetSut(true).Matches(glob, path), Is.EqualTo(expected));
         }
 
         [TestCase(true, "Music/Artists/John Doe/Example*", "Music/Artists/John Doe/Example Album")]
@@ -67,7 +67,7 @@ namespace MusicSyncConverter.UnitTests
         [TestCase(false, "Music/**/*.m3u", "Music/Artists/John Doe/Example Album/playlist.mp3")]
         public void SinglePartialPathWildcardMatches(bool expected, string glob, string path)
         {
-            Assert.AreEqual(expected, GetSut(true).Matches(glob, path));
+            Assert.That(GetSut(true).Matches(glob, path), Is.EqualTo(expected));
         }
 
     }
