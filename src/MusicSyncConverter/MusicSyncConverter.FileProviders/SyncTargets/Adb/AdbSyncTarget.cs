@@ -14,7 +14,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
 {
     internal class AdbSyncTarget : ISyncTarget, IDisposable
     {
-        private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
+        private static readonly Regex _adbTcpSerialRegex = new Regex(@"adb-(?<serial>[\w]+)-[\w]{6}\._adb-tls-connect\._tcp\.?", RegexOptions.Compiled | RegexOptions.CultureInvariant); // https://github.com/aosp-mirror/platform_system_core/blob/34a0e57a257f0081c672c9be0e87230762e677ca/adb/daemon/mdns.cpp#L164
         private readonly string _deviceSerial;
         private readonly string _basePath;
         private readonly AdbServicesClient _adbClient;
@@ -32,7 +32,14 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         {
             try
             {
-                await Process.Start("adb", "start-server").WaitForExitAsync(cancellationToken);
+                var startInfo = new ProcessStartInfo("adb", "start-server");
+
+                // enable adb's internal MDNS handler to allow MDNS connections without
+                // separate MDNS service
+                startInfo.EnvironmentVariables["ADB_MDNS_OPENSCREEN"] = "1";
+
+                var process = Process.Start(startInfo) ?? throw new InvalidOperationException("adb could not be started");
+                await process.WaitForExitAsync(cancellationToken);
             }
             catch (Exception ex)
             {
