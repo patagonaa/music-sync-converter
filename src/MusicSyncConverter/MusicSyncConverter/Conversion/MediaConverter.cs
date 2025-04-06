@@ -80,7 +80,7 @@ namespace MusicSyncConverter.Conversion
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
             EncoderInfo encoderInfo;
-            if (IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis) && (mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)))
+            if ((config.DeviceConfig.SupportedFormats != null && IsSupported(config.DeviceConfig.SupportedFormats, sourceExtension, mediaAnalysis)) && (mergedOverrides == null || IsWithinLimitations(mergedOverrides, sourceExtension, mediaAnalysis)))
             {
                 if (_copyFormats.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
                 {
