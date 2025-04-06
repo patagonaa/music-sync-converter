@@ -10,7 +10,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets
     {
         Task<SyncTargetFileInfo?> GetFileInfo(string subpath, CancellationToken cancellationToken = default);
         Task<IList<SyncTargetFileInfo>?> GetDirectoryContents(string subpath, CancellationToken cancellationToken = default);
-        Task<bool> IsCaseSensitive();
+        Task<bool> IsCaseSensitive(CancellationToken cancellationToken = default);
         Task WriteFile(string path, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default);
         Task Delete(IReadOnlyCollection<SyncTargetFileInfo> files, CancellationToken cancellationToken);
         Task<bool> IsHidden(string path);

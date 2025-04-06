@@ -37,7 +37,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
             _content = _device.Content();
             _contentProperties = _content.Properties();
             _basePath = basePath;
-            _pathComparer = new PathComparer(IsCaseSensitive().Result);
+            _pathComparer = new PathComparer(IsCaseSensitive(CancellationToken.None).Result);
             _directoryContentsCache = new Dictionary<NormalizedPath, IList<SyncTargetFileInfo>?>(_pathComparer);
             _objectIdCache = new Dictionary<NormalizedPath, string>(_pathComparer);
         }
@@ -141,7 +141,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Wpd
             return clientInfo;
         }
 
-        public Task<bool> IsCaseSensitive()
+        public Task<bool> IsCaseSensitive(CancellationToken token = default)
         {
             return Task.FromResult(false); // TODO do we even care?
         }

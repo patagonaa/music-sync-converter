@@ -89,7 +89,7 @@ namespace MusicSyncConverter
                 using (syncTarget as IDisposable)
                 {
                     var sourceCaseSensitive = true; // should only be an issue if the target is case sensitive but the source isn't
-                    var targetCaseSensitive = await syncTarget.IsCaseSensitive();
+                    var targetCaseSensitive = await syncTarget.IsCaseSensitive(cancellationToken);
 
                     var compareCaseSensitive = sourceCaseSensitive && targetCaseSensitive;
                     var pathComparer = new PathComparer(compareCaseSensitive);

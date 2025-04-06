@@ -20,6 +20,9 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         private readonly AdbServicesClient _adbClient;
         private readonly AdbSyncClient _syncService;
 
+        private readonly SemaphoreSlim _caseCheckSemaphore = new(1, 1);
+        private bool? _isCaseSensitive = null;
+
         private AdbSyncTarget(string deviceSerial, string basePath, AdbServicesClient adbClient, AdbSyncClient syncService)
         {
             _deviceSerial = deviceSerial;
@@ -158,9 +161,44 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
             return new SyncTargetFileInfo(path, stat.Mode.HasFlag(AdbClient.UnixFileMode.Directory), stat.ModifiedTime);
         }
 
-        public Task<bool> IsCaseSensitive()
+        public async Task<bool> IsCaseSensitive(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(true);
+            if (_isCaseSensitive == null)
+            {
+                await _caseCheckSemaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    if(_isCaseSensitive == null)
+                        _isCaseSensitive = await IsCaseSensitiveInternal(cancellationToken);
+                }
+                finally
+                {
+                    _caseCheckSemaphore.Release();
+                }
+            }
+            return _isCaseSensitive.Value;
+        }
+
+        public async Task<bool> IsCaseSensitiveInternal(CancellationToken token)
+        {
+            var path1 = "test.tmp";
+            var path2 = "TEST.tmp";
+
+            var f1 = await GetFileInfo(path1, token);
+            if (f1 != null)
+                await Delete([f1], token);
+
+            var f2 = await GetFileInfo(path2, token);
+            if (f2 != null)
+                await Delete([f2], token);
+
+            using var emptyStream = new MemoryStream();
+            await WriteFile(path1, emptyStream, cancellationToken: token);
+
+            var toReturn = (await GetFileInfo(path2, token)) == null;
+
+            await Delete([(await GetFileInfo(path1, token))!], token);
+            return toReturn;
         }
 
         public Task<bool> IsHidden(string path)

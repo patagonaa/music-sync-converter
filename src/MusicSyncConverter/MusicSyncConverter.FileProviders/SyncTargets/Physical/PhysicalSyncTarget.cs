@@ -93,7 +93,7 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
             return Path.Join(_basePath, path);
         }
 
-        public Task<bool> IsCaseSensitive() => Task.FromResult(_isCaseSensitive);
+        public Task<bool> IsCaseSensitive(CancellationToken cancellationToken = default) => Task.FromResult(_isCaseSensitive);
 
         private bool IsCaseSensitiveInternal(string path)
         {
