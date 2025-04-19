@@ -10,12 +10,12 @@ rsync for your music library. Sync your music library to MP3 players, phones, fl
 - convert unsupported files on-the-fly using FFMPEG
     - detect file support by extension, container, codec, profile, ...
     - override codec settings for certain paths
-- fast conversion due to parallelization
+- fast read/convert/write due to buffering and parallelization
 - automatically embed album art from the directory into the file
 - handle miscellaneous device limitations (configurable)
     - unsupported file formats/containers
     - unsupported characters in path and tags
-    - resolve playlists to a directory with the playlist's songs
+    - missing playlist support (can resolve playlists to directories)
     - sorting by FAT32 file table order
     - case-sensitive sorting
     - limited directory depth
@@ -80,7 +80,7 @@ Examples:
 - `Music/Albums/**/*.m3u` ignores `Music/Albums/Example Artist/playlist.m3u` but not `Music/Playlists/playlist.m3u`
 
 ### KeepInTarget
-By default, all files in the target directory (excluding hidden files/directories) that don't exist in the source will be deleted.
+By default, all files in the target directory that don't exist in the source will be deleted (excluding hidden files/directories).
 
 Files or directories that match one of these globs will not be deleted regardless of sync state.
 Wildcards `*` (any directory) and `**` (any directory structure) are supported.
