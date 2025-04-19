@@ -438,7 +438,7 @@ namespace MusicSyncConverter
             }
 
             var targetPlaylistFileInfo = await syncTarget.GetFileInfo(playlistPath, cancellationToken);
-            if (allSongsFound && targetPlaylistFileInfo != null && FileDatesEqual(targetPlaylistFileInfo.LastModified, playlistFile.ModifiedDate))
+            if (allSongsFound && targetPlaylistFileInfo != null && FileDatesEqual(playlistFile.ModifiedDate, targetPlaylistFileInfo.LastModified))
             {
                 handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath));
                 return null;
@@ -536,18 +536,29 @@ namespace MusicSyncConverter
             }
         }
 
-        private bool FileDatesEqual(DateTimeOffset dateTime, DateTimeOffset dateTime1)
+        private bool FileDatesEqual(DateTimeOffset source, DateTimeOffset target)
         {
+            if ((source.UtcDateTime - target.UtcDateTime).Duration() <= _fileTimestampDelta ||
+                (source.UtcDateTime - target.UtcDateTime - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
+                (source.UtcDateTime - target.UtcDateTime + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta)
+                return true;
+
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
-                // this is really stupid but to handle this properly would be a lot of effort
-                // https://twitter.com/patagona/status/1516123536275910658
-                return (dateTime - dateTime1).Duration() <= _fileTimestampDelta ||
-                    (dateTime - dateTime1 - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
-                    (dateTime - dateTime1 + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta;
+                // we are on windows, check for files synced on linux (which uses UTC FAT32) -> check for source UTC == target local
+                if ((source.UtcDateTime - target.LocalDateTime).Duration() <= _fileTimestampDelta ||
+                    (source.UtcDateTime - target.LocalDateTime - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
+                    (source.UtcDateTime - target.LocalDateTime + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta)
+                    return true;
+            } else if (Environment.OSVersion.Platform == PlatformID.Unix) {
+                // we are on unix, check for files synced on windows (which uses local FAT32) -> check for source local == target UTC
+                if ((source.LocalDateTime - target.UtcDateTime).Duration() <= _fileTimestampDelta ||
+                    (source.LocalDateTime - target.UtcDateTime - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
+                    (source.LocalDateTime - target.UtcDateTime + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta)
+                    return true;
             }
 
-            return (dateTime - dateTime1).Duration() <= _fileTimestampDelta;
+            return false;
         }
 
         private async Task<SongConvertWorkItem> ReadSong(SongReadWorkItem workItem, IFileProvider fileProvider, CancellationToken cancellationToken)

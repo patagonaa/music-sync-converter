@@ -84,8 +84,10 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Physical
                 await content.CopyToAsync(outputFile, cancellationToken);
             }
 
+            // SetLastWriteTimeLocal doesn't use DST quirks on windows so it doesn't really matter.
+            // unless we implement the quirks ourselves, Windows' "internal" local file time will always be wrong.
             if (modified.HasValue)
-                File.SetLastWriteTime(absolutePath, modified.Value.LocalDateTime);
+                File.SetLastWriteTimeUtc(absolutePath, modified.Value.UtcDateTime);
         }
 
         private string GetPhysicalPath(string path)
