@@ -606,7 +606,7 @@ namespace MusicSyncConverter
 
         private async Task<string?> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
-            var coverVariants = new[] { "cover.png", "cover.jpg", "folder.jpg" };
+            var coverVariants = new[] { "cover.png", "cover.jpg", "cover.webp", "folder.jpg" };
             foreach (var coverVariant in coverVariants)
             {
                 cancellationToken.ThrowIfCancellationRequested();
