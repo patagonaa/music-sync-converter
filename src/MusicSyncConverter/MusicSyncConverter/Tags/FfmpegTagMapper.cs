@@ -61,6 +61,10 @@ namespace MusicSyncConverter.Tags
                     case "DATE":
                     case "COMMENT":
                     case "DESCRIPTION":
+                    case "REPLAYGAIN_ALBUM_GAIN":
+                    case "REPLAYGAIN_ALBUM_PEAK":
+                    case "REPLAYGAIN_TRACK_GAIN":
+                    case "REPLAYGAIN_TRACK_PEAK":
                         toReturn.Add(new KeyValuePair<string, string>(tag.Key, tag.Value));
                         break;
 
@@ -124,6 +128,10 @@ namespace MusicSyncConverter.Tags
                     case "DATE":
                     case "COMMENT":
                     case "DESCRIPTION":
+                    case "REPLAYGAIN_ALBUM_GAIN":
+                    case "REPLAYGAIN_ALBUM_PEAK":
+                    case "REPLAYGAIN_TRACK_GAIN":
+                    case "REPLAYGAIN_TRACK_PEAK":
                         yield return new KeyValuePair<string, string>(keyToUpper, tag.Value);
                         break;
 
