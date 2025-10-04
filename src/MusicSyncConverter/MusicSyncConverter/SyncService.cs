@@ -606,12 +606,16 @@ namespace MusicSyncConverter
 
         private async Task<string?> GetAlbumCoverPath(string dirPath, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
-            var coverVariants = new[] { "cover.png", "cover.jpg", "cover.webp", "folder.jpg" };
+            var dirContents = fileProvider.GetDirectoryContents(dirPath).ToList();
+            var coverVariants = new[] { "cover", "front", "albumart", "folder" };
+            var coverExtensions = new[] { ".png", ".jpg", ".webp" };
             foreach (var coverVariant in coverVariants)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var coverFileInfo = fileProvider.GetFileInfo(Path.Join(dirPath, coverVariant));
-                if (coverFileInfo.Exists)
+                var coverFileInfo = dirContents.FirstOrDefault(x =>
+                    string.Equals(Path.GetFileNameWithoutExtension(x.Name), coverVariant, StringComparison.OrdinalIgnoreCase) &&
+                    coverExtensions.Contains(Path.GetExtension(x.Name), StringComparer.OrdinalIgnoreCase));
+                if (coverFileInfo != null)
                 {
                     if (coverFileInfo.PhysicalPath != null)
                     {
