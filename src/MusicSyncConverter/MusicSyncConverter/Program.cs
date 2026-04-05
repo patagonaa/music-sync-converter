@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
 using System;
 using System.Linq;
@@ -48,7 +49,7 @@ namespace MusicSyncConverter
                 Console.CancelKeyPress += (o, args) => { cts.Cancel(); args.Cancel = true; };
             }
 
-            var logger = new MemoryLogger();
+            var logger = new MemoryLogger(LogLevel.Information);
             try
             {
                 var tempFileService = new TempFileService();

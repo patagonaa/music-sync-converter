@@ -13,11 +13,13 @@ namespace MusicSyncConverter
     {
         private readonly ConcurrentBag<(LogLevel LogLevel, string? Filename, string Message)> _logMessages = new();
         private readonly ScopeProvider _scopeProvider;
+        private readonly LogLevel _minimumLevel;
 
         public IList<(LogLevel LogLevel, string? Filename, string Message)> Messages => _logMessages.ToList();
-        public MemoryLogger()
+        public MemoryLogger(LogLevel minimumLevel)
         {
             _scopeProvider = new ScopeProvider();
+            _minimumLevel = minimumLevel;
         }
 
         public IDisposable? BeginScope<TState>(TState state)
@@ -28,11 +30,16 @@ namespace MusicSyncConverter
 
         public bool IsEnabled(LogLevel logLevel)
         {
-            return true;
+            return logLevel >= _minimumLevel;
         }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
+            if (!IsEnabled(logLevel))
+            {
+                return;
+            }
+
             var states = _scopeProvider.GetStates().OfType<IDictionary<string, object?>>().SelectMany(x => x).ToList();
 
             var sourceFile = states.FirstOrDefault(x => x.Key == "SourceFile").Value?.ToString();
@@ -40,7 +47,7 @@ namespace MusicSyncConverter
 
             var message = new StringBuilder();
             message.Append(formatter(state, exception));
-            if(exception != null)
+            if (exception != null)
             {
                 message.AppendLine(":");
                 message.AppendLine(exception.ToString());

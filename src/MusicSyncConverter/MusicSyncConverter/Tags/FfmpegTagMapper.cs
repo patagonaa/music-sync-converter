@@ -94,7 +94,7 @@ namespace MusicSyncConverter.Tags
                         break;
 
                     default:
-                        _logger.LogInformation("Could not map Vorbis key {VorbisKey} to FFMPEG {TargetExtension} key", tag.Key, targetExtension);
+                        _logger.LogDebug("Could not map Vorbis key {VorbisKey} to FFMPEG {TargetExtension} key", tag.Key, targetExtension);
                         break;
                 }
             }
@@ -175,7 +175,7 @@ namespace MusicSyncConverter.Tags
                             yield return new KeyValuePair<string, string>(tag.Key, tag.Value);
                             break;
                         }
-                        _logger.LogInformation("Could not map FFMPEG {SourceExtension} key {FfmpegKey} to Vorbis key", sourceExtension, tag.Key);
+                        _logger.LogDebug("Could not map FFMPEG {SourceExtension} key {FfmpegKey} to Vorbis key", sourceExtension, tag.Key);
                         break;
                 }
             }
