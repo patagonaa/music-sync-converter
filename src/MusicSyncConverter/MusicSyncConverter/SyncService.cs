@@ -222,6 +222,8 @@ namespace MusicSyncConverter
                     await DeleteAdditional(syncTarget, handledFiles, pathComparer, pathMatcher, config.KeepInTarget, cancellationToken);
 
                     await syncTarget.Complete(cancellationToken);
+
+                    Console.WriteLine($"Updated {handledFiles.Count(x => x.ActionType == ConvertActionType.RemuxOrConvert)} of {handledFiles.Count} files.");
                 }
             }
         }
@@ -440,7 +442,7 @@ namespace MusicSyncConverter
             var targetPlaylistFileInfo = await syncTarget.GetFileInfo(playlistPath, cancellationToken);
             if (allSongsFound && targetPlaylistFileInfo != null && FileDatesEqual(playlistFile.ModifiedDate, targetPlaylistFileInfo.LastModified))
             {
-                handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath));
+                handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath, ConvertActionType.Keep));
                 return null;
             }
 
@@ -458,7 +460,7 @@ namespace MusicSyncConverter
                 Path = playlistPath,
                 ModifiedDate = allSongsFound ? playlistFile.ModifiedDate : DateTimeOffset.UtcNow // if songs were missing, try again next sync
             };
-            handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath));
+            handledFiles.Add(new FileSourceTargetInfo(playlistFile.Path, playlistPath, ConvertActionType.RemuxOrConvert));
             return outFile;
         }
 
@@ -641,7 +643,7 @@ namespace MusicSyncConverter
                 switch (workItem.ActionType)
                 {
                     case ConvertActionType.Keep:
-                        handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, workItem.TargetFilePath));
+                        handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, workItem.TargetFilePath, ConvertActionType.Keep));
                         return null;
                     case ConvertActionType.RemuxOrConvert:
                         {
@@ -660,7 +662,7 @@ namespace MusicSyncConverter
                             }
                             var outFilePath = Path.ChangeExtension(workItem.TargetFilePath, outputExtension);
 
-                            handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, outFilePath));
+                            handledFiles.Add(new FileSourceTargetInfo(workItem.SourceFileInfo.Path, outFilePath, ConvertActionType.RemuxOrConvert));
                             sw.Stop();
                             Console.WriteLine($"<-- Convert ({sw.ElapsedMilliseconds}ms) {workItem.SourceFileInfo.Path}");
 
@@ -759,20 +761,6 @@ namespace MusicSyncConverter
             }
         }
 
-
-        private class FileSourceTargetInfo
-        {
-            public FileSourceTargetInfo(string sourcePath, string targetPath)
-            {
-                SourcePath = sourcePath;
-                TargetPath = targetPath;
-            }
-            public string SourcePath { get; }
-            public string TargetPath { get; }
-            public override string ToString()
-            {
-                return SourcePath == TargetPath ? SourcePath : $"{SourcePath} -> {TargetPath}";
-            }
-        }
+        private record FileSourceTargetInfo(string SourcePath, string TargetPath, ConvertActionType ActionType);
     }
 }
