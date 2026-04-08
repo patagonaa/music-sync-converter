@@ -356,7 +356,7 @@ namespace MusicSyncConverter
             try
             {
                 var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
-                var digits = playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length;
+                var digits = Math.Max(playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length, 2);
                 var i = 1;
                 foreach (var song in playlist.Songs)
                 {
