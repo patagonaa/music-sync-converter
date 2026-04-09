@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
-using MusicSyncConverter.Config;
+using MusicSyncConverter.Config.OutputModels;
 using MusicSyncConverter.Conversion;
 using MusicSyncConverter.FileProviders;
 using MusicSyncConverter.FileProviders.SyncTargets;

@@ -1,9 +1,13 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Config.InputModels;
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,15 +27,23 @@ namespace MusicSyncConverter
                 return;
             }
 
-            var configBuilder = new ConfigurationBuilder();
+            var configs = new List<InputSyncConfig>();
+            var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.General)
+            {
+                Converters =
+                {
+                    new JsonStringEnumConverter()
+                },
+                ReadCommentHandling = JsonCommentHandling.Skip
+            };
             foreach (var configPath in args)
             {
-                configBuilder.AddJsonFile(configPath);
+                var inputConfig = JsonSerializer.Deserialize<InputSyncConfig>(await File.ReadAllTextAsync(configPath), jsonOptions);
+                if (inputConfig != null)
+                    configs.Add(inputConfig);
             }
 
-            var configRoot = configBuilder.Build();
-
-            var config = configRoot.Get<SyncConfig>() ?? throw new Exception("Missing Sync Config");
+            var config = ConfigMerger.MergeConfigs(configs);
 
             var cts = new CancellationTokenSource();
 

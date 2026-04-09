@@ -1,7 +1,7 @@
 ﻿using MusicSyncConverter.Conversion;
 using System.Collections.Generic;
 
-namespace MusicSyncConverter.Config
+namespace MusicSyncConverter.Config.OutputModels
 {
     public class SyncConfig
     {
@@ -20,12 +20,12 @@ namespace MusicSyncConverter.Config
                 ".it",
                 ".xm"
             };
-        public TargetDeviceConfig DeviceConfig { get; set; } = null!;
-        public IDictionary<string, FileFormatOverride>? PathFormatOverrides { get; set; }
-        public string SourceDir { get; set; } = null!;
-        public string TargetDir { get; set; } = null!;
-        public IList<string>? Exclude { get; set; }
-        public IList<string>? KeepInTarget { get; set; }
+        required public TargetDeviceConfig DeviceConfig { get; set; }
+        required public IDictionary<string, FileFormatOverride> PathFormatOverrides { get; set; }
+        required public string SourceDir { get; set; }
+        required public string TargetDir { get; set; }
+        required public IList<string> Exclude { get; set; }
+        required public IList<string> KeepInTarget { get; set; }
         public int? WorkersRead { get; set; }
         public int? WorkersConvert { get; set; }
         public int? WorkersWrite { get; set; }

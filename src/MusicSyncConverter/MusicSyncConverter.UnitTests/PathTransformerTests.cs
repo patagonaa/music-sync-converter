@@ -1,5 +1,6 @@
 ﻿using Moq;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Config.OutputModels;
 using NUnit.Framework;
 using System.IO;
 
@@ -34,7 +35,8 @@ namespace MusicSyncConverter.UnitTests
             var deviceConfig = new TargetDeviceConfig
             {
                 MaxDirectoryDepth = null,
-                NormalizeCase = true
+                NormalizeCase = true,
+                FallbackFormat = null!
             };
             var result = _sut.TransformPath(text, PathTransformType.DirPath, deviceConfig, out _);
             Assert.That(result, Is.EqualTo(expected));
@@ -52,7 +54,8 @@ namespace MusicSyncConverter.UnitTests
             var deviceConfig = new TargetDeviceConfig
             {
                 MaxDirectoryDepth = 3,
-                NormalizeCase = false
+                NormalizeCase = false,
+                FallbackFormat = null!
             };
             var result = _sut.TransformPath(text, PathTransformType.DirPath, deviceConfig, out _);
             Assert.That(result, Is.EqualTo(expected));
@@ -71,7 +74,8 @@ namespace MusicSyncConverter.UnitTests
             var deviceConfig = new TargetDeviceConfig
             {
                 MaxDirectoryDepth = 3,
-                NormalizeCase = false
+                NormalizeCase = false,
+                FallbackFormat = null!
             };
             var result = _sut.TransformPath(text, PathTransformType.FilePath, deviceConfig, out _);
             Assert.That(result, Is.EqualTo(expected));

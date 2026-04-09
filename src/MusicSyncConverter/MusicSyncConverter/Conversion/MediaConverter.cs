@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using MusicSyncConverter.Config;
+using MusicSyncConverter.Config.OutputModels;
 using MusicSyncConverter.Conversion.Ffmpeg;
 using MusicSyncConverter.Tags;
 using System;
@@ -77,7 +78,7 @@ namespace MusicSyncConverter.Conversion
 
             var albumArtConfig = config.DeviceConfig.AlbumArt;
 
-            var overrides = (config.PathFormatOverrides ?? Enumerable.Empty<KeyValuePair<string, FileFormatOverride>>()).Where(x => pathMatcher.Matches(x.Key, originalFilePath)).Select(x => x.Value).ToList();
+            var overrides = config.PathFormatOverrides.Where(x => pathMatcher.Matches(x.Key, originalFilePath)).Select(x => x.Value).ToList();
             var mergedOverrides = overrides.Any() ? MergeOverrides(overrides) : null;
 
             EncoderInfo encoderInfo;
