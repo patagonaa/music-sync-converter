@@ -26,7 +26,7 @@ This project works on Windows and Linux, macOS is untested.
 
 ### Dependencies:
 - required
-    - .NET 8 SDK
+    - .NET 10 SDK
     - ffmpeg (including ffprobe)
 - optional
     - adb (for sync to Android devices via adb)
