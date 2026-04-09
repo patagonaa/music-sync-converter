@@ -1,6 +1,5 @@
 ﻿using MusicSyncConverter.Conversion.Ffmpeg;
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -81,7 +80,7 @@ namespace MusicSyncConverter.Tags
         }
 
         protected abstract Task ExportTags(string tagFile, string fileName, CancellationToken cancellationToken);
-        public abstract bool CanHandle(string fileExtension);
+        public abstract bool CanHandle(string muxer);
         public abstract Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken);
     }
 }

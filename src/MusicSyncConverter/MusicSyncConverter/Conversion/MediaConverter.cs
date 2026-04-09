@@ -60,7 +60,8 @@ namespace MusicSyncConverter.Conversion
                 throw new Exception("Error during FFProbe: " + ex);
             }
 
-            IReadOnlyList<KeyValuePair<string, string>> tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(sourceExtension)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceExtension, cancellationToken);
+            var sourceMuxer = GetMuxerByExtension(sourceExtension) ?? throw new ArgumentException($"Don't know how to read tags from {sourceExtension}");
+            IReadOnlyList<KeyValuePair<string, string>> tags = await (_tagReaders.FirstOrDefault(x => x.CanHandle(sourceMuxer)) ?? _ffmpegTagReader).GetTags(mediaAnalysis, inputFile, sourceMuxer, cancellationToken);
             tags = FilterTags(tags);
             tags = SanitizeTags(tags, config.DeviceConfig.TagCharacterLimitations, config.DeviceConfig.TagValueDelimiter);
 
@@ -110,7 +111,7 @@ namespace MusicSyncConverter.Conversion
                 encoderInfo.SampleRateHz = 48000;
             }
 
-            var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(encoderInfo.Extension));
+            var tagWriter = _tagWriters.FirstOrDefault(x => x.CanHandle(encoderInfo.Muxer));
 
             var ffmpegTags = tagWriter != null ? null : _ffmpegTagMapper.GetFfmpegFromVorbis(tags, encoderInfo.Extension);
             var outputFile = await Convert(inputFile, hasEmbeddedCover, albumArtPath, encoderInfo, albumArtConfig, ffmpegTags, cancellationToken);
@@ -225,55 +226,34 @@ namespace MusicSyncConverter.Conversion
             return toReturn;
         }
 
-        private static EncoderInfo GetEncoderInfoRemux(FfProbeResult mediaAnalysis, string sourceExtension)
+        private static EncoderInfo GetEncoderInfoRemux(FfProbeResult? mediaAnalysis, string sourceExtension)
         {
             // this is pretty dumb, but the muxer ffprobe spits out and the one that ffmpeg needs are different
             // also, ffprobe sometimes misdetects files, so we're just going by file ending here while we can
-            return sourceExtension.ToLowerInvariant() switch
+            var muxer = GetMuxerByExtension(sourceExtension) ??
+                throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis?.Format.FormatName ?? "?"})");
+
+            return new EncoderInfo
             {
-                ".m4a" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "ipod",
-                    Extension = sourceExtension
-                },
-                ".aac" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "adts",
-                    Extension = sourceExtension
-                },
-                ".wma" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "asf",
-                    Extension = sourceExtension
-                },
-                ".ogg" or ".opus" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "ogg",
-                    Extension = sourceExtension
-                },
-                ".mp3" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "mp3",
-                    Extension = sourceExtension
-                },
-                ".flac" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "flac",
-                    Extension = sourceExtension
-                },
-                ".wav" => new EncoderInfo
-                {
-                    Codec = "copy",
-                    Muxer = "wav",
-                    Extension = sourceExtension
-                },
-                _ => throw new ArgumentException($"don't know how to remux {sourceExtension} ({mediaAnalysis.Format.FormatName})"),
+                Codec = "copy",
+                Muxer = muxer,
+                Extension = sourceExtension
+            };
+        }
+
+        private static string? GetMuxerByExtension(string fileExtension)
+        {
+            return fileExtension.ToLowerInvariant() switch
+            {
+                ".m4a" => "ipod",
+                ".aac" => "adts",
+                ".wma" => "asf",
+                ".ogg" or ".opus" => "ogg",
+                ".mp3" => "mp3",
+                ".flac" => "flac",
+                ".wav" => "wav",
+                ".mod" or ".xm" or ".it" => "libopenmpt",
+                _ => null,
             };
         }
 

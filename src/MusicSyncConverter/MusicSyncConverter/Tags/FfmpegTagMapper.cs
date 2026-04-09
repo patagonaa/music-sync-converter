@@ -12,7 +12,7 @@ namespace MusicSyncConverter.Tags
         // https://picard-docs.musicbrainz.org/en/appendices/tag_mapping.html
 
         private static readonly string[] _toSkip = new[] { "encoded_by", "major_brand", "minor_version", "compatible_brands", "handler_name", "vendor_id", "encoder", "creation_time" };
-        private static readonly string[] _vorbisCommentExtensions = new[] { ".flac", ".ogg", ".opus" };
+        private static readonly string[] _vorbisCommentMuxers = new[] { "flac", "ogg" };
         private readonly ILogger _logger;
 
         public FfmpegTagMapper(ILogger logger)
@@ -20,12 +20,12 @@ namespace MusicSyncConverter.Tags
             _logger = logger;
         }
 
-        public IReadOnlyDictionary<string, string> GetFfmpegFromVorbis(IEnumerable<KeyValuePair<string, string>> tags, string targetExtension)
+        public IReadOnlyDictionary<string, string> GetFfmpegFromVorbis(IEnumerable<KeyValuePair<string, string>> tags, string targetMuxer)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
             foreach (var tag in tags)
             {
-                if (_vorbisCommentExtensions.Contains(targetExtension, StringComparer.OrdinalIgnoreCase))
+                if (_vorbisCommentMuxers.Contains(targetMuxer, StringComparer.OrdinalIgnoreCase))
                 {
                     toReturn.Add(new KeyValuePair<string, string>(tag.Key, tag.Value));
                     continue;
@@ -80,21 +80,21 @@ namespace MusicSyncConverter.Tags
 
                     // https://github.com/FFmpeg/FFmpeg/blob/e71d5156c8fec67a7198a0032262036ae7d46bcd/libavformat/id3v2.c
                     // ffmpeg should do this, but it doesn't, so we have to do it ourselves
-                    case "REMIXER" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "REMIXER" when targetMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         toReturn.Add(new KeyValuePair<string, string>("TPE4", tag.Value));
                         break;
-                    case "ISRC" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "ISRC" when targetMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         toReturn.Add(new KeyValuePair<string, string>("TSRC", tag.Value));
                         break;
-                    case "BPM" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "BPM" when targetMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         toReturn.Add(new KeyValuePair<string, string>("TBPM", tag.Value));
                         break;
-                    case "ORIGARTIST" when targetExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "ORIGARTIST" when targetMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         toReturn.Add(new KeyValuePair<string, string>("TOPE", tag.Value));
                         break;
 
                     default:
-                        _logger.LogDebug("Could not map Vorbis key {VorbisKey} to FFMPEG {TargetExtension} key", tag.Key, targetExtension);
+                        _logger.LogDebug("Could not map Vorbis key {VorbisKey} to FFMPEG {TargetExtension} key", tag.Key, targetMuxer);
                         break;
                 }
             }
@@ -102,7 +102,7 @@ namespace MusicSyncConverter.Tags
             return toReturn.GroupBy(tag => tag.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => string.Join(';', group.Select(tag => tag.Value)));
         }
 
-        public IEnumerable<KeyValuePair<string, string>> GetVorbisFromFfmpeg(IEnumerable<KeyValuePair<string, string>> tags, string sourceExtension)
+        public IEnumerable<KeyValuePair<string, string>> GetVorbisFromFfmpeg(IEnumerable<KeyValuePair<string, string>> tags, string sourceMuxer)
         {
             foreach (var tag in tags)
             {
@@ -148,20 +148,20 @@ namespace MusicSyncConverter.Tags
                         yield return new KeyValuePair<string, string>("UNSYNCEDLYRICS", tag.Value);
                         break;
 
-                    case "TPE4" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "TPE4" when sourceMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("REMIXER", tag.Value);
                         break;
-                    case "TSRC" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "TSRC" when sourceMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("ISRC", tag.Value);
                         break;
-                    case "TBPM" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "TBPM" when sourceMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("BPM", tag.Value);
                         break;
-                    case "TOPE" when sourceExtension.Equals(".mp3", StringComparison.OrdinalIgnoreCase):
+                    case "TOPE" when sourceMuxer.Equals("mp3", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("ORIGARTIST", tag.Value);
                         break;
 
-                    case "REMIXER" when sourceExtension.Equals(".m4a", StringComparison.OrdinalIgnoreCase):
+                    case "REMIXER" when sourceMuxer.Equals("ipod", StringComparison.OrdinalIgnoreCase):
                         yield return new KeyValuePair<string, string>("REMIXER", tag.Value);
                         break;
 
@@ -170,12 +170,12 @@ namespace MusicSyncConverter.Tags
                             break;
                         if (tag.Key.StartsWith("id3v2_priv.", StringComparison.OrdinalIgnoreCase))
                             break;
-                        if (_vorbisCommentExtensions.Contains(sourceExtension, StringComparer.OrdinalIgnoreCase))
+                        if (_vorbisCommentMuxers.Contains(sourceMuxer, StringComparer.OrdinalIgnoreCase))
                         {
                             yield return new KeyValuePair<string, string>(tag.Key, tag.Value);
                             break;
                         }
-                        _logger.LogDebug("Could not map FFMPEG {SourceExtension} key {FfmpegKey} to Vorbis key", sourceExtension, tag.Key);
+                        _logger.LogDebug("Could not map FFMPEG {SourceExtension} key {FfmpegKey} to Vorbis key", sourceMuxer, tag.Key);
                         break;
                 }
             }

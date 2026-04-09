@@ -82,9 +82,9 @@ namespace MusicSyncConverter.Tags
             File.Delete(tagFile);
         }
 
-        public override bool CanHandle(string fileExtension)
+        public override bool CanHandle(string muxer)
         {
-            return _hasMetaFlac && fileExtension.Equals(".flac", StringComparison.OrdinalIgnoreCase);
+            return _hasMetaFlac && muxer.Equals("flac", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool CheckForMetaFlac()

@@ -56,9 +56,9 @@ namespace MusicSyncConverter.Tags
             return x.Replace(@"\", @"\\").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\0", "\\0");
         }
 
-        public override bool CanHandle(string fileExtension)
+        public override bool CanHandle(string muxer)
         {
-            if (fileExtension == ".ogg")
+            if (muxer == "ogg")
             {
                 return _vorbisCommentVersion != null;
             }

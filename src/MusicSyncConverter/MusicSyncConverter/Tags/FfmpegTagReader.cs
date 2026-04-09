@@ -16,20 +16,20 @@ namespace MusicSyncConverter.Tags
             _tagMapper = new FfmpegTagMapper(logger);
         }
 
-        public Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(FfProbeResult mediaAnalysis, string filename, string fileExtension, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<KeyValuePair<string, string>>> GetTags(FfProbeResult mediaAnalysis, string filename, string fileMuxer, CancellationToken cancellationToken)
         {
             var toReturn = new List<KeyValuePair<string, string>>();
             if (mediaAnalysis.Format.Tags != null)
-                toReturn.AddRange(_tagMapper.GetVorbisFromFfmpeg(mediaAnalysis.Format.Tags, fileExtension));
+                toReturn.AddRange(_tagMapper.GetVorbisFromFfmpeg(mediaAnalysis.Format.Tags, fileMuxer));
 
             var audioStreamTags = mediaAnalysis.Streams.SingleOrDefault(x => x.CodecType == FfProbeCodecType.Audio)?.Tags;
             if (audioStreamTags != null)
-                toReturn.AddRange(_tagMapper.GetVorbisFromFfmpeg(audioStreamTags, fileExtension));
+                toReturn.AddRange(_tagMapper.GetVorbisFromFfmpeg(audioStreamTags, fileMuxer));
 
             return Task.FromResult<IReadOnlyList<KeyValuePair<string, string>>>(toReturn.ToList());
         }
 
-        public bool CanHandle(string fileExtension)
+        public bool CanHandle(string muxer)
         {
             return true;
         }
