@@ -1,10 +1,12 @@
-﻿namespace MusicSyncConverter.Config
+﻿using System.Collections.Generic;
+
+namespace MusicSyncConverter.Config
 {
     public class CharacterLimitations
     {
-        public string[]? SupportedUnicodeRanges { get; set; }
+        public IList<string>? SupportedUnicodeRanges { get; set; }
         public string? SupportedChars { get; set; }
-        public CharReplacement[]? Replacements { get; set; }
+        public IList<CharReplacement>? Replacements { get; set; }
         public UnicodeNormalizationMode NormalizationMode { get; set; }
     }
 }
