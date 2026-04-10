@@ -6,6 +6,8 @@ namespace MusicSyncConverter.Tags
 {
     internal readonly record struct AlbumArt(ApicType Type, string MimeType, string? Description, byte[] PictureData)
     {
+        public const string VorbisMetadataKey = "METADATA_BLOCK_PICTURE";
+
         public string ToVorbisMetaDataBlockPicture()
         {
             var toReturn = new byte[8 + MimeType.Length + 4 + (Description?.Length ?? 0) + 20 + PictureData.Length];

@@ -27,17 +27,14 @@ namespace MusicSyncConverter.Tags
             var tags = new List<KeyValuePair<string, string>>();
             using (var sr = new StreamReader(tagFile, Encoding.UTF8))
             {
-                while (!sr.EndOfStream)
+                string? line;
+                while ((line = await ReadLine(sr, cancellationToken)) != null)
                 {
-                    string? line = await ReadLine(sr);
-                    if (line == null)
-                        break;
-
                     var match = _keyValueRegex.Match(line);
                     if (match.Success)
                     {
                         string key = match.Groups[1].Value.ToUpperInvariant();
-                        if (key == "METADATA_BLOCK_PICTURE")
+                        if (key == AlbumArt.VorbisMetadataKey)
                             continue;
                         tags.Add(new KeyValuePair<string, string>(key, match.Groups[2].Value));
                     }
@@ -55,28 +52,15 @@ namespace MusicSyncConverter.Tags
             return tags;
         }
 
-        private static async Task<string?> ReadLine(StreamReader sr)
+        private static async Task<string?> ReadLine(StreamReader sr, CancellationToken token)
         {
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
                 // both vorbiscomment and metaflac write the tag file in text mode which converts \n to \r\n
                 // but this also means a tag containing \r\n is converted to \r\r\n which messes things up, so we just ignore all \r and split by \n only
-
-                if (sr.EndOfStream)
-                    return null;
-                var sb = new StringBuilder();
-                int chr;
-                while ((chr = sr.Read()) != -1)
-                {
-                    if (chr == '\r')
-                        continue;
-                    if (chr == '\n')
-                        break;
-                    sb.Append((char)chr);
-                }
-                return sb.ToString();
+                return (await sr.ReadLineAsync(token))?.Replace("\r", null);
             }
-            return await sr.ReadLineAsync();
+            return await sr.ReadLineAsync(token);
         }
 
         protected abstract Task ExportTags(string tagFile, string fileName, CancellationToken cancellationToken);

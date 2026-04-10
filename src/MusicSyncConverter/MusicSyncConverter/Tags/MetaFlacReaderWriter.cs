@@ -35,7 +35,7 @@ namespace MusicSyncConverter.Tags
         public override async Task SetTags(IReadOnlyList<KeyValuePair<string, string>> tags, IReadOnlyList<AlbumArt> albumArt, string fileName, CancellationToken cancellationToken)
         {
             IReadOnlyList<KeyValuePair<string, string>> tagsToWrite = tags
-                .Concat(albumArt.Select(x => new KeyValuePair<string, string>("METADATA_BLOCK_PICTURE", x.ToVorbisMetaDataBlockPicture())))
+                .Concat(albumArt.Select(x => new KeyValuePair<string, string>(AlbumArt.VorbisMetadataKey, x.ToVorbisMetaDataBlockPicture())))
                 .ToList();
 
             var unsafeChars = new char[] { '\r', '\n' };

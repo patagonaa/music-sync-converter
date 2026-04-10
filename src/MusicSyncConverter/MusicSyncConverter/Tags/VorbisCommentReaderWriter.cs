@@ -34,7 +34,7 @@ namespace MusicSyncConverter.Tags
         {
             var tagsToSet = tags
                 .Select(x => new KeyValuePair<string, string>(x.Key, EscapeUnsafeChars(x.Value)))
-                .Concat(albumArt.Select(x => new KeyValuePair<string, string>("METADATA_BLOCK_PICTURE", x.ToVorbisMetaDataBlockPicture())))
+                .Concat(albumArt.Select(x => new KeyValuePair<string, string>(AlbumArt.VorbisMetadataKey, x.ToVorbisMetaDataBlockPicture())))
                 .ToList();
 
             var tagsFile = _tempFileSession.GetTempFilePath(".txt");

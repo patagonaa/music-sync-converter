@@ -406,7 +406,7 @@ namespace MusicSyncConverter.Conversion
                 var albumArt = new AlbumArt(ApicType.CoverFront, albumArtMimeType, null, await File.ReadAllBytesAsync(albumArtPath, cancellationToken));
                 File.Delete(albumArtPath);
                 var metadataFile = _tempFileSession.GetTempFilePath(".txt");
-                await File.WriteAllTextAsync(metadataFile, $";FFMETADATA1\nMETADATA_BLOCK_PICTURE={albumArt.ToVorbisMetaDataBlockPicture()}\n", cancellationToken);
+                await File.WriteAllTextAsync(metadataFile, $";FFMETADATA1\n{AlbumArt.VorbisMetadataKey}={albumArt.ToVorbisMetaDataBlockPicture()}\n", cancellationToken);
 
                 var remuxArgs = new List<string>
                 {
