@@ -70,6 +70,16 @@ namespace MusicSyncConverter
                 CancellationToken = cancellationToken
             };
 
+            // ordered, otherwise grouping will sometimes output the same directory twice,
+            // causing unnecessary target dir reads
+            var routingOptions = new ExecutionDataflowBlockOptions
+            {
+                BoundedCapacity = config.WorkersConvert ?? Environment.ProcessorCount,
+                MaxDegreeOfParallelism = config.WorkersConvert ?? Environment.ProcessorCount,
+                EnsureOrdered = true,
+                CancellationToken = cancellationToken
+            };
+
             var writeOptions = new ExecutionDataflowBlockOptions
             {
                 BoundedCapacity = config.WorkersWrite ?? 1,
@@ -114,7 +124,7 @@ namespace MusicSyncConverter
                     var groupSongsByDirectoryBlock = CustomBlocks.GetGroupByBlock<SongSyncInfo, NormalizedPath>(x => new NormalizedPath(Path.GetDirectoryName(x.TargetPath)!), pathComparer, cancellationToken);
                     groupSongsByDirectoryBlock.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
-                    var getSyncInfoBlock = new TransformManyBlock<SourceFileInfo, SongSyncInfo>(x => FilterNull(GetSyncInfo(x, config)), workerOptions);
+                    var getSyncInfoBlock = new TransformManyBlock<SourceFileInfo, SongSyncInfo>(x => FilterNull(GetSyncInfo(x, config)), routingOptions);
                     getSyncInfoBlock.LinkTo(groupSongsByDirectoryBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // --- playlist handling ---
@@ -148,7 +158,7 @@ namespace MusicSyncConverter
                     {
                         await getSyncInfoBlock.SendAsync(file, cancellationToken);
                         await readPlaylistBlock.SendAsync(file, cancellationToken);
-                    }, workerOptions);
+                    }, routingOptions);
 
                     Console.WriteLine("Checking for new/changed files");
                     try
