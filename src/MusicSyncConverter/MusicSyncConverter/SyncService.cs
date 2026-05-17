@@ -117,7 +117,7 @@ namespace MusicSyncConverter
                     var readSongBlock = new TransformBlock<SongReadWorkItem, SongConvertWorkItem>(async x => await AddLogContext(x.SourceFileInfo, x.TargetFilePath, () => ReadSong(x, fileProvider, cancellationToken)), readOptions);
                     readSongBlock.LinkTo(convertSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
-                    var compareSongBlock = new TransformManyBlock<SongSyncInfo[], SongReadWorkItem>(async x => await CompareSongDates(x, config, pathComparer, syncTarget, cancellationToken).ToListAsync(), readOptions);
+                    var compareSongBlock = new TransformManyBlock<IGrouping<NormalizedPath, SongSyncInfo>, SongReadWorkItem>(async x => await CompareSongDates(x, config, pathComparer, syncTarget, cancellationToken).ToListAsync(), readOptions);
                     compareSongBlock.LinkTo(readSongBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
                     // group files by their directory before comparing so we don't have to do a directory listing for every file
@@ -134,8 +134,9 @@ namespace MusicSyncConverter
                     IDataflowBlock? convertPlaylistBlock = null;
                     if (config.DeviceConfig.ResolvePlaylists)
                     {
-                        var resolvePlaylistBlockSpecific = new ActionBlock<Playlist>(async x => await AddLogContext(x.PlaylistFileInfo, null, () => ResolvePlaylist(x, fileProvider, compareSongBlock)), workerOptions);
+                        var resolvePlaylistBlockSpecific = new TransformBlock<Playlist, IGrouping<NormalizedPath, SongSyncInfo>>(async x => await AddLogContext(x.PlaylistFileInfo, null, () => ResolvePlaylist(x, fileProvider, cancellationToken)), workerOptions);
                         readPlaylistBlock.LinkTo(resolvePlaylistBlockSpecific, new DataflowLinkOptions { PropagateCompletion = true });
+                        resolvePlaylistBlockSpecific.LinkTo(compareSongBlock, new DataflowLinkOptions { PropagateCompletion = false });
                         resolvePlaylistBlock = resolvePlaylistBlockSpecific;
                     }
                     else
@@ -361,49 +362,47 @@ namespace MusicSyncConverter
             return new Playlist(playlistFile, playlistSongs);
         }
 
-        private async Task ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, ITargetBlock<SongSyncInfo[]> songOutput)
+        private async Task<IGrouping<NormalizedPath, SongSyncInfo>> ResolvePlaylist(Playlist playlist, IFileProvider fileProvider, CancellationToken cancellationToken)
         {
-            try
+            var playlistFilePath = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path) ?? throw new ArgumentException("Playlist directory null!");
+            var playlistOutputPath = Path.Join(playlistFilePath, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path));
+            var digits = Math.Max(playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length, 2);
+            var i = 1;
+
+            var syncInfos = new List<SongSyncInfo>();
+            foreach (var song in playlist.Songs)
             {
-                var playlistDir = Path.GetDirectoryName(playlist.PlaylistFileInfo.Path);
-                var digits = Math.Max(playlist.Songs.Count.ToString(CultureInfo.InvariantCulture).Length, 2);
-                var i = 1;
-                foreach (var song in playlist.Songs)
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Path.IsPathRooted(song.Path))
+                    throw new InvalidOperationException($"Playlist song paths must not be absolute! In {playlist.PlaylistFileInfo.Path}");
+
+                var sourcePath = Path.Join(playlistFilePath, song.Path);
+                var songFileInfo = fileProvider.GetFileInfo(sourcePath);
+
+                if (songFileInfo.Exists)
                 {
-                    if (Path.IsPathRooted(song.Path))
-                        throw new InvalidOperationException($"Playlist song paths must not be absolute! In {playlist.PlaylistFileInfo.Path}");
-
-                    var sourcePath = Path.Join(playlistDir, song.Path);
-                    var songFileInfo = fileProvider.GetFileInfo(sourcePath);
-
-                    if (songFileInfo.Exists)
+                    var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
+                    var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
+                    var songTargetPath = Path.Join(playlistOutputPath, songFileName);
+                    var syncInfo = new SongSyncInfo
                     {
-                        var songName = song.Name != null ? (song.Name + ".tmp") : Path.GetFileName(song.Path);
-                        var songFileName = $"{i.ToString(CultureInfo.InvariantCulture).PadLeft(digits, '0')} {songName}";
-                        var songTargetPath = Path.Join(playlistDir, Path.GetFileNameWithoutExtension(playlist.PlaylistFileInfo.Path), songFileName);
-                        var syncInfo = new SongSyncInfo
+                        SourceFileInfo = new SourceFileInfo
                         {
-                            SourceFileInfo = new SourceFileInfo
-                            {
-                                Path = sourcePath,
-                                ModifiedDate = songFileInfo.LastModified
-                            },
-                            TargetPath = songTargetPath
-                        };
-                        await songOutput.SendAsync(new[] { syncInfo });
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Missing song {SourcePath} referenced in playlist {PlaylistPath}", sourcePath, playlist.PlaylistFileInfo.Path);
-                    }
-                    i++;
+                            Path = sourcePath,
+                            ModifiedDate = songFileInfo.LastModified
+                        },
+                        TargetPath = songTargetPath
+                    };
+                    syncInfos.Add(syncInfo);
                 }
+                else
+                {
+                    _logger.LogWarning("Missing song {SourcePath} referenced in playlist {PlaylistPath}", sourcePath, playlist.PlaylistFileInfo.Path);
+                }
+                i++;
             }
-            catch (Exception ex)
-            {
-                songOutput.Fault(ex);
-                throw;
-            }
+
+            return new Grouping<NormalizedPath, SongSyncInfo>(new NormalizedPath(playlistOutputPath), syncInfos);
         }
 
         private async Task<OutputFile?> ConvertPlaylist(Playlist playlist, SyncConfig syncConfig, ISyncTarget syncTarget, PathComparer pathComparer, ConcurrentBag<FileSourceTargetInfo> handledFiles, CancellationToken handledFilesCompleteToken, CancellationToken cancellationToken)
@@ -488,14 +487,14 @@ namespace MusicSyncConverter
             };
         }
 
-        private async IAsyncEnumerable<SongReadWorkItem> CompareSongDates(SongSyncInfo[] syncInfos, SyncConfig config, PathComparer pathComparer, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
+        private async IAsyncEnumerable<SongReadWorkItem> CompareSongDates(IGrouping<NormalizedPath, SongSyncInfo> syncInfos, SyncConfig config, PathComparer pathComparer, ISyncTarget syncTarget, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            if (syncInfos.Length == 0)
+            if (!syncInfos.Any())
                 yield break;
 
-            var proposedDirPath = Path.GetDirectoryName(syncInfos[0].TargetPath) ?? throw new ArgumentException("DirectoryName is null");
+            var proposedDirPath = syncInfos.Key;
 
-            Debug.Assert(syncInfos.All(x => pathComparer.Equals(Path.GetDirectoryName(x.TargetPath), proposedDirPath)), "CompareSongDates can only compare batches of files in the same directory");
+            Debug.Assert(syncInfos.All(x => pathComparer.Equals(Path.GetDirectoryName(x.TargetPath), proposedDirPath.Path)), "CompareSongDates can only compare batches of files in the same directory");
 
             var duplicateFiles = syncInfos.GroupBy(x => new NormalizedPath(Path.GetFileNameWithoutExtension(x.TargetPath)), pathComparer).Where(group => group.Count() > 1).ToList();
             if (duplicateFiles.Any())
@@ -506,7 +505,7 @@ namespace MusicSyncConverter
                 }
             }
 
-            var targetDirPath = _pathTransformer.TransformPath(proposedDirPath, PathTransformType.DirPath, config.DeviceConfig, out _);
+            var targetDirPath = _pathTransformer.TransformPath(proposedDirPath.Path, PathTransformType.DirPath, config.DeviceConfig, out _);
 
             var directoryContents = await syncTarget.GetDirectoryContents(targetDirPath, cancellationToken);
 
@@ -562,7 +561,9 @@ namespace MusicSyncConverter
                     (source.UtcDateTime - target.LocalDateTime - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
                     (source.UtcDateTime - target.LocalDateTime + TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta)
                     return true;
-            } else if (Environment.OSVersion.Platform == PlatformID.Unix) {
+            }
+            else if (Environment.OSVersion.Platform == PlatformID.Unix)
+            {
                 // we are on unix, check for files synced on windows (which uses local FAT32) -> check for source local == target UTC
                 if ((source.LocalDateTime - target.UtcDateTime).Duration() <= _fileTimestampDelta ||
                     (source.LocalDateTime - target.UtcDateTime - TimeSpan.FromHours(1)).Duration() <= _fileTimestampDelta ||
