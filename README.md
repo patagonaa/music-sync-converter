@@ -49,6 +49,20 @@ On Linux/MacOS you can probably just install these using the package manager (e.
 
 To use this, a configuration file specifying (at least) the source and target directories has to be created once (see [Wiki: Configuration](https://github.com/patagonaa/music-sync-converter/wiki/Configuration)).
 
+Some predefined device configurations (including supported file formats, codecs, etc.) for Android and a few car stereos are available in src/MusicSyncConverter/MusicSyncConverter/configs/.
+
 Once the config(s) are ready, you can run this using:
 
 `dotnet run --project src/MusicSyncConverter/MusicSyncConverter -- config.json [...]`
+
+## Support
+
+You can support this project in multiple ways:
+
+- by adding device configurations for devices you have available for testing
+- by reporting bugs (via issues)
+- by requesting features (via issues/discussions)
+- by contributing code directly (via pull requests)
+- by donating (via GitHub Sponsors)
+
+AI-generated contributions (code or issues) are not welcome and will not be considered.
