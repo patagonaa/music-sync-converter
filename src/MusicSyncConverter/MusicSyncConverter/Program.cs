@@ -34,7 +34,8 @@ namespace MusicSyncConverter
                 {
                     new JsonStringEnumConverter()
                 },
-                ReadCommentHandling = JsonCommentHandling.Skip
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
             };
             foreach (var configPath in args)
             {
