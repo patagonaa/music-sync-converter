@@ -57,12 +57,13 @@ Once the config(s) are ready, you can run this using:
 
 ## Support
 
-You can support this project in multiple ways:
+Please consider donating (via GitHub Sponsors) if this project is useful to you.
+
+You can also support this project in other ways:
 
 - by adding device configurations for devices you have available for testing
 - by reporting bugs (via issues)
 - by requesting features (via issues/discussions)
 - by contributing code directly (via pull requests)
-- by donating (via GitHub Sponsors)
 
 AI-generated contributions (code or issues) are not welcome and will not be considered.
