@@ -11,17 +11,20 @@ namespace MusicSyncConverter
 {
     public class TextSanitizer : ITextSanitizer
     {
-        private static readonly char[] _pathUnsupportedChars;
+        private static readonly HashSet<char> _pathUnsupportedChars;
+        private static readonly HashSet<char> _pathUnsupportedEndChars;
         private static readonly Dictionary<string, (int Start, int End)> _unicodeRanges;
 
         static TextSanitizer()
         {
-            var chars = "\"<>|:*?\\/";
-            _pathUnsupportedChars = Path.GetInvalidFileNameChars()
-                .Concat(chars)
-                .Concat(Enumerable.Range(0, 32).Select(x => (char)x))
-                .Distinct()
-                .ToArray();
+            _pathUnsupportedChars = [
+                .. "\"<>|:*?\\/",
+                .. Path.GetInvalidFileNameChars(),
+                .. Path.GetInvalidPathChars(),
+                .. Enumerable.Range(0, 32).Select(x => (char)x)
+                ];
+
+            _pathUnsupportedEndChars = ['.', ' '];
 
             _unicodeRanges = new Dictionary<string, (int Start, int End)>();
             var rangeProperties = typeof(UnicodeRanges).GetProperties(BindingFlags.Public | BindingFlags.Static);
@@ -116,7 +119,15 @@ namespace MusicSyncConverter
                 }
             }
 
-            return toReturn.ToString();
+            var toReturnStr = toReturn.ToString();
+
+            // if this is for a path and the last char is not a valid end char, add an underscore
+            if (isForPath && toReturnStr.Length >= 1 && _pathUnsupportedEndChars.Contains(toReturnStr[^1]))
+            {
+                return toReturnStr + '_';
+            }
+
+            return toReturnStr;
         }
 
         private static bool IsSupportedRune(Rune rune, CharacterLimitations characterLimitations)

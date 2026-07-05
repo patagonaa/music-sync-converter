@@ -36,6 +36,20 @@ namespace MusicSyncConverter.UnitTests
             Assert.That(result, Is.EqualTo(expected));
         }
 
+        [TestCase("Hello", "Hello")]
+        [TestCase("Hello._", "Hello.")]
+        [TestCase("Hello._", "Hello.")]
+        public void Test_NoLimitations_Path_InvalidEndChars(string expected, string text)
+        {
+            var limitations = new CharacterLimitations
+            {
+                Replacements = null,
+                SupportedChars = null
+            };
+            var result = _sut.SanitizePathPart(limitations, text, out _);
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
         [TestCase("aeoeueAeOeUess<3x", "äöüÄÖÜß♥×")]
         public void Test_Limitations_Text_Replacements(string expected, string text)
         {
@@ -133,7 +147,7 @@ namespace MusicSyncConverter.UnitTests
             {
                 Replacements = new[]
                 {
-                    new CharReplacement{ Char = "👨‍👩‍👧‍👦", Replacement ="WeirdEmoji" },
+                    new CharReplacement{ Char = "👨‍👩‍👧‍👦", Replacement = "WeirdEmoji" },
                 },
                 SupportedChars = null
             };
