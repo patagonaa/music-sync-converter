@@ -215,17 +215,24 @@ namespace MusicSyncConverter.FileProviders.SyncTargets.Adb
         public async Task WriteFile(string subpath, Stream content, DateTimeOffset? modified = null, CancellationToken cancellationToken = default)
         {
             var path = GetUnixPath(subpath);
-            await _syncService.Push(path, content, modified ?? DateTimeOffset.Now, (AdbClient.UnixFileMode)Convert.ToInt32("660", 8), cancellationToken);
-            var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
-            var command = "am";
-            var parms = new string[] { "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", fileUrl };
-            using (var ms = new MemoryStream())
+            try
             {
-                var returnCode = await _adbClient.Execute(_deviceSerial, command, parms, null, ms, ms, cancellationToken);
-                if (returnCode != 0)
+                await _syncService.Push(path, content, modified ?? DateTimeOffset.Now, (AdbClient.UnixFileMode)Convert.ToInt32("660", 8), cancellationToken);
+                var fileUrl = $"file://{string.Join('/', path.Split('/').Select(x => Uri.EscapeDataString(x)))}";
+                var command = "am";
+                var parms = new string[] { "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", fileUrl };
+                using (var ms = new MemoryStream())
                 {
-                    throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
+                    var returnCode = await _adbClient.Execute(_deviceSerial, command, parms, null, ms, ms, cancellationToken);
+                    if (returnCode != 0)
+                    {
+                        throw new Exception(Encoding.UTF8.GetString(ms.ToArray()));
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error while writing {subpath}", ex);
             }
         }
 
